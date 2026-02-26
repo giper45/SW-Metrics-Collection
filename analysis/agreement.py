@@ -121,6 +121,13 @@ def _entity_key(row: Dict) -> Tuple[str, str, str]:
     return str(row["project"]), str(row["component_type"]), str(row["component"])
 
 
+def _timestamp_key(row: Dict) -> str:
+    value = row.get("timestamp_utc")
+    if isinstance(value, str):
+        return value.strip()
+    return ""
+
+
 def _component_scope(
     values_a: Dict[Tuple[str, str, str], float],
     values_b: Dict[Tuple[str, str, str], float],
@@ -138,7 +145,7 @@ def _component_scope(
 
 
 def compute_agreement_rows(long_rows: List[Dict], min_common: int = 2) -> List[Dict]:
-    grouped: Dict[Tuple[str, str], Dict[Tuple[str, str], Dict[Tuple[str, str, str], float]]] = {}
+    grouped: Dict[Tuple[str, str], Dict[Tuple[str, str], Dict[Tuple[str, str, str], Dict[str, object]]]] = {}
 
     for row in long_rows:
         group_key = (str(row["run_id"]), str(row["metric"]))
@@ -147,12 +154,18 @@ def compute_agreement_rows(long_rows: List[Dict], min_common: int = 2) -> List[D
 
         grouped.setdefault(group_key, {})
         grouped[group_key].setdefault(measure_key, {})
-        if entity_key in grouped[group_key][measure_key]:
-            raise ValueError(
-                f"duplicate measure for run={group_key[0]} metric={group_key[1]} "
-                f"tool={measure_key[0]} variant={measure_key[1]} entity={entity_key}"
-            )
-        grouped[group_key][measure_key][entity_key] = float(row["value"])
+        candidate = {
+            "value": float(row["value"]),
+            "timestamp_utc": _timestamp_key(row),
+        }
+        current = grouped[group_key][measure_key].get(entity_key)
+        if current is None:
+            grouped[group_key][measure_key][entity_key] = candidate
+            continue
+        # If the same measure appears multiple times for the same entity
+        # (e.g., collector re-run with same RUN_ID), keep the most recent value.
+        if str(candidate["timestamp_utc"]) >= str(current.get("timestamp_utc", "")):
+            grouped[group_key][measure_key][entity_key] = candidate
 
     agreement_rows: List[Dict] = []
     for group_key in sorted(grouped.keys()):
@@ -163,8 +176,8 @@ def compute_agreement_rows(long_rows: List[Dict], min_common: int = 2) -> List[D
             values_b = measures[measure_b]
             common_entities = sorted(set(values_a.keys()) & set(values_b.keys()))
 
-            vec_a = [values_a[entity] for entity in common_entities]
-            vec_b = [values_b[entity] for entity in common_entities]
+            vec_a = [float(values_a[entity]["value"]) for entity in common_entities]
+            vec_b = [float(values_b[entity]["value"]) for entity in common_entities]
             rho = spearman_rho(vec_a, vec_b) if len(common_entities) >= 2 else None
             notes = ""
             if len(common_entities) < 2:

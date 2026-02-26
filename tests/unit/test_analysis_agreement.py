@@ -127,3 +127,39 @@ def test_agreement_emits_insufficient_common_row_with_note(tmp_path: Path):
     assert out_rows[0]["n_common"] == "1"
     assert out_rows[0]["spearman_rho"] == ""
     assert out_rows[0]["notes"] == "n_common<2"
+
+
+def test_agreement_handles_duplicate_measurements_by_latest_timestamp(tmp_path: Path):
+    module = load_module(MODULE_PATH, "analysis_agreement_duplicates")
+    input_csv = tmp_path / "dataset_long.csv"
+    output_csv = tmp_path / "agreement.csv"
+
+    columns = [
+        "project",
+        "run_id",
+        "timestamp_utc",
+        "component",
+        "component_type",
+        "metric",
+        "tool",
+        "variant",
+        "value",
+        "tool_version",
+    ]
+    rows = [
+        # Duplicate measurement for cloc/m1: latest timestamp should win (value=11).
+        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-26T10:00:00Z", "component": "m1", "component_type": "module", "metric": "loc", "tool": "cloc", "variant": "cloc-default", "value": 10, "tool_version": "1.0"},
+        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-26T12:00:00Z", "component": "m1", "component_type": "module", "metric": "loc", "tool": "cloc", "variant": "cloc-default", "value": 11, "tool_version": "1.0"},
+        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-26T12:00:00Z", "component": "m2", "component_type": "module", "metric": "loc", "tool": "cloc", "variant": "cloc-default", "value": 20, "tool_version": "1.0"},
+        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-26T12:00:00Z", "component": "m1", "component_type": "module", "metric": "loc", "tool": "tokei", "variant": "tokei-default", "value": 11, "tool_version": "1.0"},
+        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-26T12:00:00Z", "component": "m2", "component_type": "module", "metric": "loc", "tool": "tokei", "variant": "tokei-default", "value": 21, "tool_version": "1.0"},
+    ]
+    write_csv(input_csv, columns, rows)
+
+    summary = module.run_agreement(input_csv, output_csv)
+    assert summary["agreement_rows"] == 1
+    out_rows = read_csv(output_csv)
+    assert len(out_rows) == 1
+    assert out_rows[0]["metric"] == "loc"
+    assert out_rows[0]["n_common"] == "2"
+    assert out_rows[0]["notes"] == ""

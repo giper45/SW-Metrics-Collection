@@ -24,3 +24,5 @@ build/
 
 src/**
 !src/.keep
+
+results_normalized/
