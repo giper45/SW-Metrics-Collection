@@ -22,8 +22,8 @@ if _COMMON_DIR and str(_COMMON_DIR) not in sys.path:
 
 from result_writer import filter_projects, generate_run_id, run_collector, write_jsonl_rows
 
-METRIC_NAME = "cbo"
-VARIANT_NAME = "ck-cbo-agg"
+METRIC_NAME = "ce-ca"
+VARIANT_NAME = "ck-ce-ca-proxy"
 TOOL_NAME = "ck"
 TOOL_JAR = "/opt/tools/ck.jar"
 
@@ -113,22 +113,24 @@ def parse_ck_csv(class_csv_path):
     return rows
 
 
-def mean_numeric(rows, key):
+def sum_numeric(rows, keys):
     values = []
     for row in rows:
-        raw = row.get(key)
-        if raw is None or raw == "":
-            continue
-        try:
-            values.append(float(raw))
-        except ValueError:
-            continue
+        for key in keys:
+            raw = row.get(key)
+            if raw is None or raw == "":
+                continue
+            try:
+                values.append(float(raw))
+            except ValueError:
+                continue
+            break
     if not values:
         return 0.0
-    return round(sum(values) / len(values), 6)
+    return round(sum(values), 6)
 
 
-def collect_module_value(module_path, dry_run):
+def collect_module_values(module_path, dry_run):
     out_dir = tempfile.mkdtemp(prefix="ck-out-")
     try:
         ck_input = choose_ck_input_path(module_path)
@@ -137,9 +139,12 @@ def collect_module_value(module_path, dry_run):
             dry_run,
         )
         if dry_run:
-            return 0.0
+            return 0.0, 0.0, 0.0
         rows = parse_ck_csv(resolve_ck_csv_path(out_dir, "class.csv"))
-        return mean_numeric(rows, "cbo")
+        ce_value = sum_numeric(rows, ["ce", "fanout", "fan_out", "out_degree"])
+        ca_value = sum_numeric(rows, ["ca", "fanin", "fan_in", "in_degree"])
+        cbo_value = sum_numeric(rows, ["cbo"])
+        return ce_value, ca_value, cbo_value
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)
 
@@ -149,7 +154,7 @@ def output_path(results_dir, project, timestamp):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Collect module-level coupling proxy (CBO) with CK")
+    parser = argparse.ArgumentParser(description="Collect module-level Ce/Ca proxies with CK")
     parser.add_argument("--app-dir", default=os.environ.get("SRC_ROOT", os.environ.get("METRIC_APP_DIR", "/app")))
     parser.add_argument("--results-dir", default=os.environ.get("RESULTS_DIR", os.environ.get("METRIC_RESULTS_DIR", "/results")))
     parser.add_argument("--dry-run", action="store_true")
@@ -169,6 +174,7 @@ def main():
     for project, project_path in projects:
         rows = []
         for module, module_path in discover_modules(project, project_path):
+            ce_value, ca_value, cbo_value = collect_module_values(module_path, args.dry_run)
             rows.append(
                 {
                     "project": project,
@@ -176,12 +182,55 @@ def main():
                     "variant": VARIANT_NAME,
                     "component_type": "module",
                     "component": module,
-                    "value": collect_module_value(module_path, args.dry_run),
+                    "value": ce_value,
                     "tool": TOOL_NAME,
                     "tool_version": version,
                     "parameters": {
                         "category": "coupling",
-                        "dimension": "cbo_mean_proxy",
+                        "dimension": "ce",
+                        "aggregation": "module-class-sum",
+                        "proxy_source": "ce|fanout",
+                        "ignored_dirs": sorted(VENDOR_DIRS),
+                        "tool_output": "class.csv",
+                    },
+                    "timestamp_utc": timestamp,
+                }
+            )
+            rows.append(
+                {
+                    "project": project,
+                    "metric": METRIC_NAME,
+                    "variant": VARIANT_NAME,
+                    "component_type": "module",
+                    "component": module,
+                    "value": ca_value,
+                    "tool": TOOL_NAME,
+                    "tool_version": version,
+                    "parameters": {
+                        "category": "coupling",
+                        "dimension": "ca",
+                        "aggregation": "module-class-sum",
+                        "proxy_source": "ca|fanin",
+                        "ignored_dirs": sorted(VENDOR_DIRS),
+                        "tool_output": "class.csv",
+                    },
+                    "timestamp_utc": timestamp,
+                }
+            )
+            rows.append(
+                {
+                    "project": project,
+                    "metric": "cbo",
+                    "variant": VARIANT_NAME,
+                    "component_type": "module",
+                    "component": module,
+                    "value": cbo_value,
+                    "tool": TOOL_NAME,
+                    "tool_version": version,
+                    "parameters": {
+                        "category": "coupling",
+                        "dimension": "cbo",
+                        "aggregation": "module-class-sum",
                         "ignored_dirs": sorted(VENDOR_DIRS),
                         "tool_output": "class.csv",
                     },

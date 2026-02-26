@@ -93,3 +93,62 @@ def test_normalize_results_backfills_legacy_schema_and_run_id(tmp_path: Path):
     assert len(run_ids) == 1
     assert all(row["schema_version"] == "1.0" for row in rows)
     assert next(row for row in rows if row["metric"] == "instability")["run_id"] in run_ids
+
+
+def test_normalize_derives_lizard_module_cc(tmp_path: Path):
+    module = load_module(NORMALIZE_PATH, "analysis_normalize_lizard_module")
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "out"
+    input_dir.mkdir(parents=True, exist_ok=True)
+
+    (input_dir / "lizard.jsonl").write_text(
+        (
+            '{"schema_version":"1.0","run_id":"33333333-3333-4333-8333-333333333333","project":"repo-x","metric":"cc","variant":"lizard-default","component_type":"method","component":"core/src/A.java::foo@L10","status":"ok","value":3.0,"tool":"lizard","tool_version":"1.17","parameters":{},"timestamp_utc":"2026-02-26T10:00:00Z"}\n'
+            '{"schema_version":"1.0","run_id":"33333333-3333-4333-8333-333333333333","project":"repo-x","metric":"cc","variant":"lizard-default","component_type":"method","component":"core/src/B.java::bar@L20","status":"ok","value":5.0,"tool":"lizard","tool_version":"1.17","parameters":{},"timestamp_utc":"2026-02-26T10:00:00Z"}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    summary = module.normalize_results(input_dir, output_dir)
+    assert summary["derived_rows"] == 1
+
+    rows = read_jsonl(output_dir / "lizard.jsonl")
+    cc_module_rows = [
+        row
+        for row in rows
+        if row.get("metric") == "cc"
+        and row.get("tool") == "lizard"
+        and row.get("variant") == "lizard-module-mean"
+        and row.get("component_type") == "module"
+    ]
+    assert len(cc_module_rows) == 1
+    assert cc_module_rows[0]["component"] == "core"
+    assert cc_module_rows[0]["value"] == 4.0
+
+
+def test_normalize_skips_derived_instability_when_direct_exists(tmp_path: Path):
+    module = load_module(NORMALIZE_PATH, "analysis_normalize_instability_skip")
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "out"
+    input_dir.mkdir(parents=True, exist_ok=True)
+
+    (input_dir / "instability.jsonl").write_text(
+        (
+            '{"schema_version":"1.0","run_id":"44444444-4444-4444-8444-444444444444","project":"repo-y","metric":"ce-ca","variant":"jdepend-default","component_type":"module","component":"module-a","status":"ok","value":4.0,"tool":"jdepend","tool_version":"2.9","parameters":{"dimension":"ce"},"timestamp_utc":"2026-02-26T10:00:00Z"}\n'
+            '{"schema_version":"1.0","run_id":"44444444-4444-4444-8444-444444444444","project":"repo-y","metric":"ce-ca","variant":"jdepend-default","component_type":"module","component":"module-a","status":"ok","value":1.0,"tool":"jdepend","tool_version":"2.9","parameters":{"dimension":"ca"},"timestamp_utc":"2026-02-26T10:00:00Z"}\n'
+            '{"schema_version":"1.0","run_id":"44444444-4444-4444-8444-444444444444","project":"repo-y","metric":"instability","variant":"jdepend-default","component_type":"module","component":"module-a","status":"ok","value":0.8,"tool":"jdepend","tool_version":"2.9","parameters":{},"timestamp_utc":"2026-02-26T10:00:00Z"}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    summary = module.normalize_results(input_dir, output_dir)
+    assert summary["derived_rows"] == 0
+
+    rows = read_jsonl(output_dir / "instability.jsonl")
+    derived = [
+        row
+        for row in rows
+        if row.get("metric") == "instability"
+        and str(row.get("variant", "")).endswith("-normalized")
+    ]
+    assert not derived

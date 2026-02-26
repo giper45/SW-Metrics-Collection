@@ -39,6 +39,7 @@ DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_commo
 	agreement \
 	report \
 	experiment \
+	experiments \
 	paper-tables \
 	validate-results \
 	test-unit \
@@ -143,7 +144,7 @@ manifest:
 		--out $(RESULTS_DIR)/manifest-$(EXPERIMENT_RUN_ID).json \
 		--primary-component-type file \
 		--language java \
-		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,cc:lizard:lizard-default,wmc:ckjm:ckjm-raw,nom:ckjm:ckjm-raw,ce-ca:jdepend:jdepend-default,cbo:ck:ck-cbo-agg,instability:jdepend:jdepend-default,instability:ck:ck-derived,lcom:ck:ck-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,static-warnings:checkstyle:checkstyle-default,test-coverage:jacoco:jacoco-default,code-churn:git:git-default'
+		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,cc:lizard:lizard-default,wmc:ckjm:ckjm-raw,nom:ckjm:ckjm-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,instability:jdepend:jdepend-default,instability:ck:ck-derived,lcom:ck:ck-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,static-warnings:checkstyle:checkstyle-default,test-coverage:jacoco:jacoco-default,code-churn:git:git-default'
 
 normalize:
 	python3 -m analysis.normalize $(RESULTS_DIR) $(RESULTS_NORMALIZED_DIR)
@@ -158,6 +159,8 @@ report:
 	python3 -m analysis.report_repository --normalized $(RESULTS_NORMALIZED_DIR) --long $(ANALYSIS_OUT_DIR)/dataset_long.csv --out $(ANALYSIS_OUT_DIR)/repo_report.csv --out-json $(ANALYSIS_OUT_DIR)/repo_report.json
 
 experiment: clean-experiment collect-all manifest normalize dataset agreement report
+
+experiments: experiment
 
 paper-tables:
 	@echo "paper-tables target is not implemented yet; add analysis/paper_tables.py then wire it here."

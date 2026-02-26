@@ -8,7 +8,7 @@ Container-based scaffold for software metric experiments, focused on Java projec
 |---|---|---|
 | Size | LOC | `loc-cloc`, `loc-tokei`, `loc-scc` |
 | Complexity | CC | `cc-lizard`, `cc-ckjm` (raw `wmc/nom`, normalized downstream) |
-| Coupling | Ce/Ca | `ce-ca-jdepend`, `ce-ca-ck-cbo` |
+| Coupling | Ce/Ca | `ce-ca-jdepend`, `ce-ca-ck-cbo` (CK proxy) |
 | Instability | I | `i-jdepend`, `i-ck-derived` |
 | Cohesion | LCOM | `lcom-ck` |
 | Duplication | Duplication rate | `duplication-jscpd` |
@@ -174,17 +174,18 @@ make validate-results
 
 Expected files in `results/` include:
 
-- `thealgorithms-java-<timestamp>-loc-cloc-default.jsonl`
-- `thealgorithms-java-<timestamp>-cc-lizard-default.jsonl`
-- `thealgorithms-java-<timestamp>-wmc-ckjm-raw.jsonl`
-- `thealgorithms-java-<timestamp>-ce-ca-jdepend-default.jsonl`
-- `thealgorithms-java-<timestamp>-instability-jdepend-default.jsonl`
-- `thealgorithms-java-<timestamp>-lcom-ck-default.jsonl`
-- `thealgorithms-java-<timestamp>-duplication-rate-jscpd-default.jsonl`
-- `thealgorithms-java-<timestamp>-maintainability-index-mi-halstead-default.jsonl`
-- `thealgorithms-java-<timestamp>-static-warnings-checkstyle-default.jsonl`
-- `thealgorithms-java-<timestamp>-test-coverage-jacoco-default.jsonl`
-- `thealgorithms-java-<timestamp>-code-churn-git-default.jsonl`
+- `thealgorithms-java-<timestamp>-loc-cloc-cloc-default.jsonl`
+- `thealgorithms-java-<timestamp>-cc-lizard-lizard-default.jsonl`
+- `thealgorithms-java-<timestamp>-wmc-ckjm-ckjm-raw.jsonl`
+- `thealgorithms-java-<timestamp>-ce-ca-jdepend-jdepend-default.jsonl`
+- `thealgorithms-java-<timestamp>-ce-ca-ck-ck-ce-ca-proxy.jsonl`
+- `thealgorithms-java-<timestamp>-instability-jdepend-jdepend-default.jsonl`
+- `thealgorithms-java-<timestamp>-lcom-ck-ck-default.jsonl`
+- `thealgorithms-java-<timestamp>-duplication-rate-jscpd-jscpd-default.jsonl`
+- `thealgorithms-java-<timestamp>-maintainability-index-java-halstead-analyzer-mi-halstead-default.jsonl`
+- `thealgorithms-java-<timestamp>-static-warnings-checkstyle-checkstyle-default.jsonl`
+- `thealgorithms-java-<timestamp>-test-coverage-jacoco-jacoco-default.jsonl`
+- `thealgorithms-java-<timestamp>-code-churn-git-git-default.jsonl`
 
 Timestamp format: UTC ISO8601 with seconds, example `2026-02-24T15:04:05Z`.
 

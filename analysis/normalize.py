@@ -259,7 +259,114 @@ def _derive_cc_from_wmc_nom(rows: List[Dict], source_file: str) -> List[Dict]:
     return derived_rows
 
 
+def _module_from_method_component(row: Dict) -> Optional[str]:
+    params = row.get("parameters")
+    if isinstance(params, dict):
+        for key in ("module", "module_name"):
+            value = params.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    component = row.get("component")
+    if not isinstance(component, str) or not component.strip():
+        return None
+
+    component_text = component.strip().replace("\\", "/")
+    file_part = component_text.split("::", 1)[0]
+    file_part = file_part.lstrip("./")
+    if "/" in file_part:
+        head = file_part.split("/", 1)[0].strip()
+        if head:
+            return head
+    return file_part or None
+
+
+def _derive_lizard_module_cc(rows: List[Dict], source_file: str) -> List[Dict]:
+    module_values: Dict[Tuple, List[float]] = defaultdict(list)
+
+    for row in rows:
+        if str(row.get("status", "ok")).strip().lower() != "ok":
+            continue
+        if str(row.get("metric", "")).strip() != "cc":
+            continue
+        if str(row.get("tool", "")).strip() != "lizard":
+            continue
+        if str(row.get("component_type", "")).strip().lower() != "method":
+            continue
+
+        value = _safe_float(row.get("value"))
+        if value is None:
+            continue
+
+        project = row.get("project")
+        module = _module_from_method_component(row)
+        if not isinstance(project, str) or not project.strip() or not module:
+            continue
+
+        key = (
+            project.strip(),
+            module,
+            str(row.get("tool", "unknown")),
+            "lizard-module-mean",
+            str(row.get("tool_version", "unknown")),
+            str(row.get("timestamp_utc", utc_timestamp_now())),
+            str(row.get("schema_version", "1.0")),
+            str(row.get("run_id", "unknown")),
+            str(row.get("variant", "lizard-default")),
+        )
+        module_values[key].append(float(value))
+
+    derived_rows: List[Dict] = []
+    for key in sorted(module_values.keys()):
+        values = module_values[key]
+        if not values:
+            continue
+        project, module, source_tool, derived_variant, tool_version, timestamp_utc, schema_version, run_id, source_variant = key
+        derived_rows.append(
+            {
+                "schema_version": schema_version,
+                "run_id": run_id,
+                "project": project,
+                "metric": "cc",
+                "variant": derived_variant,
+                "component_type": "module",
+                "component": module,
+                "status": "ok",
+                "value": round(sum(values) / len(values), 6),
+                "tool": source_tool,
+                "tool_version": tool_version,
+                "parameters": {
+                    "derived_from": "method_cc",
+                    "aggregation": "module-mean",
+                    "method_count": len(values),
+                },
+                "timestamp_utc": timestamp_utc,
+                "source_tool": source_tool,
+                "source_variant": source_variant,
+                "source_file": source_file,
+            }
+        )
+
+    return derived_rows
+
+
+def _existing_direct_instability_keys(rows: List[Dict]) -> set:
+    keys = set()
+    for row in rows:
+        if str(row.get("status", "ok")).strip().lower() != "ok":
+            continue
+        if str(row.get("metric", "")).strip().lower().replace("-", "_") != "instability":
+            continue
+        project = row.get("project")
+        module = _infer_module(row)
+        tool = row.get("tool")
+        if isinstance(project, str) and project.strip() and module and isinstance(tool, str) and tool.strip():
+            keys.add((project.strip(), module, tool.strip()))
+    return keys
+
+
 def _derive_instability_from_ce_ca(rows: List[Dict], source_file: str) -> List[Dict]:
+    direct_instability_keys = _existing_direct_instability_keys(rows)
     ce_ca: Dict[Tuple, Dict[str, float]] = defaultdict(dict)
     for row in rows:
         if str(row.get("status", "ok")).strip().lower() != "ok":
@@ -295,6 +402,8 @@ def _derive_instability_from_ce_ca(rows: List[Dict], source_file: str) -> List[D
         if "ce" not in values or "ca" not in values:
             continue
         project, module, source_tool, source_variant, tool_version, timestamp_utc, schema_version, run_id = key
+        if (project, module, source_tool) in direct_instability_keys:
+            continue
         ce_value = float(values["ce"])
         ca_value = float(values["ca"])
         denom = ce_value + ca_value
@@ -329,6 +438,7 @@ def normalize_rows(rows: List[Dict], source_file: str) -> List[Dict]:
     canonical_rows = _backfill_required_metadata(rows, source_file=source_file)
     normalized = list(canonical_rows)
     normalized.extend(_derive_cc_from_wmc_nom(canonical_rows, source_file=source_file))
+    normalized.extend(_derive_lizard_module_cc(canonical_rows, source_file=source_file))
     normalized.extend(_derive_instability_from_ce_ca(canonical_rows, source_file=source_file))
     return normalized
 
