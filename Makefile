@@ -4,6 +4,7 @@ RESULTS_NORMALIZED_DIR := $(PWD)/results_normalized
 ANALYSIS_OUT_DIR := $(PWD)/analysis_out
 EXPERIMENT_RUN_ID := $(if $(METRIC_RUN_ID),$(METRIC_RUN_ID),$(shell python3 -c 'import uuid; print(uuid.uuid4())'))
 DOCKER_RUN_METRIC := docker run --rm -e METRIC_RUN_ID=$(EXPERIMENT_RUN_ID) -v $(SRC_DIR):/app:ro -v $(RESULTS_DIR):/results
+DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_common=$(PWD)/metrics/common
 
 .PHONY: \
 	collect-loc-cloc \
@@ -44,19 +45,19 @@ DOCKER_RUN_METRIC := docker run --rm -e METRIC_RUN_ID=$(EXPERIMENT_RUN_ID) -v $(
 	test-docker-matrix
 
 collect-loc-cloc:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t loc-cloc:latest metrics/size/generic/loc-cloc
+	$(DOCKER_BUILD_METRIC) -t loc-cloc:latest metrics/size/generic/loc-cloc
 	$(DOCKER_RUN_METRIC) loc-cloc:latest
 
 collect-loc-tokei:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t loc-tokei:latest metrics/size/generic/loc-tokei
+	$(DOCKER_BUILD_METRIC) -t loc-tokei:latest metrics/size/generic/loc-tokei
 	$(DOCKER_RUN_METRIC) loc-tokei:latest
 
 collect-loc-scc:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t loc-scc:latest metrics/size/generic/loc-scc
+	$(DOCKER_BUILD_METRIC) -t loc-scc:latest metrics/size/generic/loc-scc
 	$(DOCKER_RUN_METRIC) loc-scc:latest
 
 collect-normalized-loc-cloc:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t normalized-collector:latest metrics/generic/normalized-collector
+	$(DOCKER_BUILD_METRIC) -t normalized-collector:latest metrics/generic/normalized-collector
 	$(DOCKER_RUN_METRIC) \
 		-e METRIC_KEY=loc \
 		-e TOOL_KEY=cloc \
@@ -68,55 +69,55 @@ collect-normalized-loc-cloc:
 		normalized-collector:latest
 
 collect-cc-lizard:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t cc-lizard:latest metrics/complexity/generic/cc-lizard
+	$(DOCKER_BUILD_METRIC) -t cc-lizard:latest metrics/complexity/generic/cc-lizard
 	$(DOCKER_RUN_METRIC) cc-lizard:latest
 
 collect-cc-radon:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t cc-radon:latest metrics/complexity/python/cc-radon
+	$(DOCKER_BUILD_METRIC) -t cc-radon:latest metrics/complexity/python/cc-radon
 	$(DOCKER_RUN_METRIC) cc-radon:latest
 
 collect-cc-ckjm:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t cc-ckjm:latest metrics/complexity/java/cc-ckjm
+	$(DOCKER_BUILD_METRIC) -t cc-ckjm:latest metrics/complexity/java/cc-ckjm
 	$(DOCKER_RUN_METRIC) cc-ckjm:latest
 
 collect-ce-ca-jdepend:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t ce-ca-jdepend:latest metrics/coupling/java/ce-ca-jdepend
+	$(DOCKER_BUILD_METRIC) -t ce-ca-jdepend:latest metrics/coupling/java/ce-ca-jdepend
 	$(DOCKER_RUN_METRIC) ce-ca-jdepend:latest
 
 collect-ce-ca-ck-cbo:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t ce-ca-ck-cbo:latest metrics/coupling/java/ce-ca-ck-cbo
+	$(DOCKER_BUILD_METRIC) -t ce-ca-ck-cbo:latest metrics/coupling/java/ce-ca-ck-cbo
 	$(DOCKER_RUN_METRIC) ce-ca-ck-cbo:latest
 
 collect-i-jdepend:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t i-jdepend:latest metrics/instability/java/i-jdepend
+	$(DOCKER_BUILD_METRIC) -t i-jdepend:latest metrics/instability/java/i-jdepend
 	$(DOCKER_RUN_METRIC) i-jdepend:latest
 
 collect-i-ck-derived:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t i-ck-derived:latest metrics/instability/java/i-ck-derived
+	$(DOCKER_BUILD_METRIC) -t i-ck-derived:latest metrics/instability/java/i-ck-derived
 	$(DOCKER_RUN_METRIC) i-ck-derived:latest
 
 collect-lcom-ck:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t lcom-ck:latest metrics/cohesion/java/lcom-ck
+	$(DOCKER_BUILD_METRIC) -t lcom-ck:latest metrics/cohesion/java/lcom-ck
 	$(DOCKER_RUN_METRIC) lcom-ck:latest
 
 collect-duplication-jscpd:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t duplication-jscpd:latest metrics/duplication/java/duplication-jscpd
+	$(DOCKER_BUILD_METRIC) -t duplication-jscpd:latest metrics/duplication/java/duplication-jscpd
 	$(DOCKER_RUN_METRIC) duplication-jscpd:latest
 
 collect-mi-halstead-java:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t mi-halstead-java:latest metrics/maintainability/java/mi-halstead-java
+	$(DOCKER_BUILD_METRIC) -t mi-halstead-java:latest metrics/maintainability/java/mi-halstead-java
 	$(DOCKER_RUN_METRIC) mi-halstead-java:latest
 
 collect-static-warnings-checkstyle:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t static-warnings-checkstyle:latest metrics/quality/java/static-warnings-checkstyle
+	$(DOCKER_BUILD_METRIC) -t static-warnings-checkstyle:latest metrics/quality/java/static-warnings-checkstyle
 	$(DOCKER_RUN_METRIC) static-warnings-checkstyle:latest
 
 collect-coverage-jacoco:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t coverage-jacoco:latest metrics/testing/java/coverage-jacoco
+	$(DOCKER_BUILD_METRIC) -t coverage-jacoco:latest metrics/testing/java/coverage-jacoco
 	$(DOCKER_RUN_METRIC) coverage-jacoco:latest
 
 collect-churn-git:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t churn-git:latest metrics/evolution/generic/churn-git
+	$(DOCKER_BUILD_METRIC) -t churn-git:latest metrics/evolution/generic/churn-git
 	$(DOCKER_RUN_METRIC) churn-git:latest
 
 collect-size-all: collect-loc-cloc collect-loc-tokei collect-loc-scc
@@ -162,7 +163,7 @@ paper-tables:
 	@echo "paper-tables target is not implemented yet; add analysis/paper_tables.py then wire it here."
 
 validate-results:
-	docker build --build-context repo_common=$(PWD)/metrics/common -t jsonl-schema-validator:latest metrics/validate-results/generic/jsonl-schema-validator
+	$(DOCKER_BUILD_METRIC) -t jsonl-schema-validator:latest metrics/validate-results/generic/jsonl-schema-validator
 	docker run --rm -v $(RESULTS_DIR):/results jsonl-schema-validator:latest
 
 test-unit:
