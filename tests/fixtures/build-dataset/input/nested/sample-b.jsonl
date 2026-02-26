@@ -1,0 +1,1 @@
+{"schema_version":"1.0","run_id":"33333333-3333-4333-8333-333333333333","project":"repo-a","metric":"loc","variant":"cloc-default","component_type":"module","component":"module-b","value":55.0,"tool":"cloc","tool_version":"1.96","parameters":{},"timestamp_utc":"2026-02-24T15:04:05Z"}

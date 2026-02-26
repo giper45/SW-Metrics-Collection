@@ -1,0 +1,26 @@
+# Metric outputs
+results/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs and archives
+*.log
+*.tar
+
+
+src/**
+!src/.keep

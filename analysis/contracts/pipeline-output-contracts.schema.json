@@ -1,0 +1,822 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sw-metrics-collection.local/schemas/pipeline-output-contracts.schema.json",
+  "title": "SW Metrics Collection - Pipeline Output Contracts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "collection",
+    "manifest",
+    "normalization",
+    "dataset",
+    "agreement",
+    "report",
+    "validation"
+  ],
+  "properties": {
+    "collection": {
+      "$ref": "#/$defs/CollectionPhaseOutput"
+    },
+    "manifest": {
+      "$ref": "#/$defs/ManifestPhaseOutput"
+    },
+    "normalization": {
+      "$ref": "#/$defs/NormalizationPhaseOutput"
+    },
+    "dataset": {
+      "$ref": "#/$defs/DatasetPhaseOutput"
+    },
+    "agreement": {
+      "$ref": "#/$defs/AgreementPhaseOutput"
+    },
+    "report": {
+      "$ref": "#/$defs/ReportPhaseOutput"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationPhaseOutput"
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "UtcTimestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "ComponentType": {
+      "type": "string",
+      "enum": [
+        "module",
+        "package",
+        "file",
+        "class",
+        "method",
+        "project",
+        "clone_block"
+      ]
+    },
+    "Status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "skipped"
+      ]
+    },
+    "MetricEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "run_id",
+        "project",
+        "timestamp_utc",
+        "metric",
+        "tool",
+        "tool_version",
+        "variant",
+        "component_type",
+        "component",
+        "status",
+        "value",
+        "parameters"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestamp_utc": {
+          "$ref": "#/$defs/UtcTimestamp"
+        },
+        "metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variant": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component_type": {
+          "$ref": "#/$defs/ComponentType"
+        },
+        "component": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "skip_reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "parameters": {
+          "type": "object"
+        },
+        "submetric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_variant": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ok"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "skipped"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "skip_reason"
+            ],
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "CollectionPhaseOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "path_pattern",
+        "rows"
+      ],
+      "properties": {
+        "artifact_type": {
+          "const": "jsonl"
+        },
+        "path_pattern": {
+          "const": "/results/<project>-<timestamp_utc>-<metric>-<tool>-<variant>.jsonl"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MetricEvent"
+          }
+        }
+      }
+    },
+    "ManifestDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "language",
+        "run_id",
+        "projects",
+        "timestamp_utc_start",
+        "timestamp_utc_end",
+        "component_type_primary",
+        "variants_expected",
+        "variants_observed",
+        "missing_variants",
+        "outputs",
+        "git_commit",
+        "git_url",
+        "status",
+        "rows_total",
+        "parse_errors",
+        "run_ids_seen"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "timestamp_utc_start": {
+          "$ref": "#/$defs/UtcTimestamp"
+        },
+        "timestamp_utc_end": {
+          "$ref": "#/$defs/UtcTimestamp"
+        },
+        "component_type_primary": {
+          "$ref": "#/$defs/ComponentType"
+        },
+        "variants_expected": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^.+\\|.+\\|.+$"
+          }
+        },
+        "variants_observed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^.+\\|.+\\|.+$"
+          }
+        },
+        "missing_variants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^.+\\|.+\\|.+$"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "file",
+              "rows",
+              "projects",
+              "variants",
+              "status_counts"
+            ],
+            "properties": {
+              "file": {
+                "type": "string",
+                "minLength": 1
+              },
+              "rows": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "projects": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "variants": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^.+\\|.+\\|.+$"
+                }
+              },
+              "status_counts": {
+                "type": "object",
+                "propertyNames": {
+                  "enum": [
+                    "ok",
+                    "skipped"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        },
+        "git_commit": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "git_url": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "partial",
+            "failed"
+          ]
+        },
+        "rows_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parse_errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "run_ids_seen": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "ManifestPhaseOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "path",
+        "manifest"
+      ],
+      "properties": {
+        "artifact_type": {
+          "const": "json"
+        },
+        "path": {
+          "pattern": "^/results/manifest-.*\\.json$",
+          "type": "string"
+        },
+        "manifest": {
+          "$ref": "#/$defs/ManifestDocument"
+        }
+      }
+    },
+    "NormalizationPhaseOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "path_pattern",
+        "rows"
+      ],
+      "properties": {
+        "artifact_type": {
+          "const": "jsonl"
+        },
+        "path_pattern": {
+          "const": "/results_normalized/<project>-<timestamp_utc>-<metric>-<tool>-<variant>.jsonl"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MetricEvent"
+          }
+        }
+      }
+    },
+    "DatasetLongRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "run_id",
+        "timestamp_utc",
+        "component",
+        "component_type",
+        "metric",
+        "status",
+        "tool",
+        "variant",
+        "value",
+        "tool_version"
+      ],
+      "properties": {
+        "project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestamp_utc": {
+          "$ref": "#/$defs/UtcTimestamp"
+        },
+        "component": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component_type": {
+          "$ref": "#/$defs/ComponentType"
+        },
+        "metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "ok"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variant": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "number"
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "DatasetWideRow": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestamp_utc": {
+          "$ref": "#/$defs/UtcTimestamp"
+        },
+        "component": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component_type": {
+          "$ref": "#/$defs/ComponentType"
+        }
+      },
+      "required": [
+        "project",
+        "run_id",
+        "timestamp_utc",
+        "component",
+        "component_type"
+      ],
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9_-]*__[a-z0-9][a-z0-9_-]*__[a-z0-9][a-z0-9_.-]*$": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "DatasetPhaseOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "long_csv_rows",
+        "wide_csv_selected_component_type",
+        "wide_csv_selected_rows",
+        "wide_csv_by_component_type"
+      ],
+      "properties": {
+        "long_csv_rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatasetLongRow"
+          }
+        },
+        "wide_csv_selected_component_type": {
+          "$ref": "#/$defs/ComponentType"
+        },
+        "wide_csv_selected_rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DatasetWideRow"
+          }
+        },
+        "wide_csv_by_component_type": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/ComponentType"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/DatasetWideRow"
+            }
+          }
+        }
+      }
+    },
+    "AgreementRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "metric",
+        "component_type",
+        "tool_a",
+        "variant_a",
+        "tool_b",
+        "variant_b",
+        "n_common",
+        "spearman_rho",
+        "notes"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_a": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variant_a": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_b": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variant_b": {
+          "type": "string",
+          "minLength": 1
+        },
+        "n_common": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "spearman_rho": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": -1,
+          "maximum": 1
+        },
+        "notes": {
+          "type": "string",
+          "enum": [
+            "",
+            "n_common<2",
+            "insufficient_common_points"
+          ]
+        }
+      }
+    },
+    "AgreementPhaseOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agreement_rows"
+      ],
+      "properties": {
+        "agreement_rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgreementRow"
+          }
+        }
+      }
+    },
+    "RepoReportRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "metric",
+        "run_ids",
+        "repo_commit",
+        "repo_dirty",
+        "raw_rows_ok",
+        "raw_rows_skipped",
+        "n_rows_metric",
+        "n_components",
+        "component_types",
+        "n_tools",
+        "tools",
+        "variants",
+        "agreement_pairs",
+        "agreement_mean_rho",
+        "agreement_min_common",
+        "agreement_max_common"
+      ],
+      "properties": {
+        "project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "run_ids": {
+          "type": "string"
+        },
+        "repo_commit": {
+          "type": "string"
+        },
+        "repo_dirty": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false"
+          ]
+        },
+        "raw_rows_ok": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "raw_rows_skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "n_rows_metric": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "n_components": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "component_types": {
+          "type": "string"
+        },
+        "n_tools": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tools": {
+          "type": "string"
+        },
+        "variants": {
+          "type": "string"
+        },
+        "agreement_pairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "agreement_mean_rho": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "agreement_min_common": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        },
+        "agreement_max_common": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "RepoReportJson": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projects",
+        "metrics",
+        "rows"
+      ],
+      "properties": {
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RepoReportRow"
+          }
+        }
+      }
+    },
+    "ReportPhaseOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo_report_rows",
+        "repo_report_json"
+      ],
+      "properties": {
+        "repo_report_rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RepoReportRow"
+          }
+        },
+        "repo_report_json": {
+          "$ref": "#/$defs/RepoReportJson"
+        }
+      }
+    },
+    "ValidationPhaseOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "rows",
+        "invalid_rows",
+        "exit_code"
+      ],
+      "properties": {
+        "files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid_rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exit_code": {
+          "type": "integer",
+          "enum": [
+            0,
+            1
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+https://github.com/square/retrofit.git
+https://github.com/square/okio.git
+https://github.com/apache/commons-lang.git
+https://github.com/apache/commons-io.git
+https://github.com/apache/commons-collections.git
+https://github.com/google/guava.git
+https://github.com/junit-team/junit5.git
+https://github.com/spring-projects/spring-framework.git
+https://github.com/google/gson.git
+https://github.com/TheAlgorithms/Java.git
