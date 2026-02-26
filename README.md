@@ -10,7 +10,7 @@ Container-based scaffold for software metric experiments, focused on Java projec
 | Complexity | CC | `cc-lizard`, `cc-ckjm` (raw `wmc/nom`, normalized downstream) |
 | Coupling | Ce/Ca | `ce-ca-jdepend`, `ce-ca-ck-cbo` (CK proxy) |
 | Instability | I | `i-jdepend`, `i-ck-derived` |
-| Cohesion | LCOM | `lcom-ck` |
+| Cohesion | LCOM | `lcom-ck`, `lcom-ckjm` |
 | Duplication | Duplication rate | `duplication-jscpd` |
 | Maintainability | Maintainability Index (+ Halstead aggregates) | `mi-halstead-java` |
 | Quality | Static warnings | `static-warnings-checkstyle` |
@@ -59,6 +59,7 @@ make collect-ce-ca-ck-cbo
 make collect-i-jdepend
 make collect-i-ck-derived
 make collect-lcom-ck
+make collect-lcom-ckjm
 ```
 
 3. Run paper extras:
@@ -181,6 +182,7 @@ Expected files in `results/` include:
 - `thealgorithms-java-<timestamp>-ce-ca-ck-ck-ce-ca-proxy.jsonl`
 - `thealgorithms-java-<timestamp>-instability-jdepend-jdepend-default.jsonl`
 - `thealgorithms-java-<timestamp>-lcom-ck-ck-default.jsonl`
+- `thealgorithms-java-<timestamp>-lcom-ckjm-ckjm-default.jsonl`
 - `thealgorithms-java-<timestamp>-duplication-rate-jscpd-jscpd-default.jsonl`
 - `thealgorithms-java-<timestamp>-maintainability-index-java-halstead-analyzer-mi-halstead-default.jsonl`
 - `thealgorithms-java-<timestamp>-static-warnings-checkstyle-checkstyle-default.jsonl`

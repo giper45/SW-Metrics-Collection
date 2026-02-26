@@ -16,6 +16,7 @@ REQUIRED_CONTAINERS = [
     "metrics/instability/java/i-jdepend",
     "metrics/instability/java/i-ck-derived",
     "metrics/cohesion/java/lcom-ck",
+    "metrics/cohesion/java/lcom-ckjm",
     "metrics/duplication/java/duplication-jscpd",
     "metrics/maintainability/java/mi-halstead-java",
     "metrics/quality/java/static-warnings-checkstyle",

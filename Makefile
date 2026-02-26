@@ -19,6 +19,7 @@ DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_commo
 	collect-i-jdepend \
 	collect-i-ck-derived \
 	collect-lcom-ck \
+	collect-lcom-ckjm \
 	collect-duplication-jscpd \
 	collect-mi-halstead-java \
 	collect-static-warnings-checkstyle \
@@ -101,6 +102,10 @@ collect-lcom-ck:
 	$(DOCKER_BUILD_METRIC) -t lcom-ck:latest metrics/cohesion/java/lcom-ck
 	$(DOCKER_RUN_METRIC) lcom-ck:latest
 
+collect-lcom-ckjm:
+	$(DOCKER_BUILD_METRIC) -t lcom-ckjm:latest metrics/cohesion/java/lcom-ckjm
+	$(DOCKER_RUN_METRIC) lcom-ckjm:latest
+
 collect-duplication-jscpd:
 	$(DOCKER_BUILD_METRIC) -t duplication-jscpd:latest metrics/duplication/java/duplication-jscpd
 	$(DOCKER_RUN_METRIC) duplication-jscpd:latest
@@ -125,7 +130,7 @@ collect-size-all: collect-loc-cloc collect-loc-tokei collect-loc-scc
 collect-complexity-all: collect-cc-lizard collect-cc-ckjm
 collect-coupling-all: collect-ce-ca-jdepend collect-ce-ca-ck-cbo
 collect-instability-all: collect-i-jdepend collect-i-ck-derived
-collect-cohesion-all: collect-lcom-ck
+collect-cohesion-all: collect-lcom-ck collect-lcom-ckjm
 collect-paper-extras: collect-duplication-jscpd collect-mi-halstead-java collect-static-warnings-checkstyle collect-coverage-jacoco collect-churn-git
 
 clean-experiment:
@@ -144,7 +149,7 @@ manifest:
 		--out $(RESULTS_DIR)/manifest-$(EXPERIMENT_RUN_ID).json \
 		--primary-component-type file \
 		--language java \
-		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,cc:lizard:lizard-default,wmc:ckjm:ckjm-raw,nom:ckjm:ckjm-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,instability:jdepend:jdepend-default,instability:ck:ck-derived,lcom:ck:ck-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,static-warnings:checkstyle:checkstyle-default,test-coverage:jacoco:jacoco-default,code-churn:git:git-default'
+		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,cc:lizard:lizard-default,wmc:ckjm:ckjm-raw,nom:ckjm:ckjm-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,instability:jdepend:jdepend-default,instability:ck:ck-derived,lcom:ck:ck-default,lcom:ckjm:ckjm-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,static-warnings:checkstyle:checkstyle-default,test-coverage:jacoco:jacoco-default,code-churn:git:git-default'
 
 normalize:
 	python3 -m analysis.normalize $(RESULTS_DIR) $(RESULTS_NORMALIZED_DIR)
