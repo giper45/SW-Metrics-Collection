@@ -28,14 +28,36 @@ while read -r url; do
   [ -z "$url" ] && continue
   name=$(basename "$url" .git)
   echo "Cloning $name ..."
-  git clone --depth 1 "$url" "src/$name"
+  if [ "$name" = "junit5" ]; then
+    git clone --depth 1 --filter=blob:none --sparse "$url" "src/$name"
+    git -C "src/$name" sparse-checkout set junit-jupiter-engine
+  elif [ "$name" = "spring-framework" ]; then
+    git clone --depth 1 --filter=blob:none --sparse "$url" "src/$name"
+    git -C "src/$name" sparse-checkout set spring-core
+  else
+    git clone --depth 1 "$url" "src/$name"
+  fi
 done < repos_10.txt
 
 # Save analyzed commits (reproducibility)
-echo "project,commit" > analysis_out/repo_commits.csv
+echo "repository,scope_path,commit,origin_url" > analysis_out/repo_commits.csv
 for d in src/*; do
   [ -d "$d/.git" ] || continue
-  echo "$(basename "$d"),$(git -C "$d" rev-parse HEAD)" >> analysis_out/repo_commits.csv
+  name="$(basename "$d")"
+  scope_path="/"
+  out_name="$name"
+
+  if [ "$name" = "junit5" ]; then
+    scope_path="/junit-jupiter-engine"
+  elif [ "$name" = "spring-framework" ]; then
+    scope_path="/spring-core"
+  elif [ "$name" = "Java" ]; then
+    out_name="thealgorithms-java"
+  fi
+
+  commit="$(git -C "$d" rev-parse HEAD)"
+  origin="$(git -C "$d" remote get-url origin)"
+  echo "$out_name,$scope_path,$commit,$origin" >> analysis_out/repo_commits.csv
 done
 
 echo "Done."
