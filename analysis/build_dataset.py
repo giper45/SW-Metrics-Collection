@@ -181,6 +181,67 @@ def _measure_column(metric: str, tool: str, variant: str) -> str:
     return f"{metric}__{tool}__{variant}"
 
 
+def _measurement_key(row: Dict) -> Tuple[str, str, str, str, str, str, str, str]:
+    return (
+        str(row["project"]),
+        str(row["run_id"]),
+        str(row["timestamp_utc"]),
+        str(row["component"]),
+        str(row["component_type"]),
+        str(row["metric"]),
+        str(row["tool"]),
+        str(row["variant"]),
+    )
+
+
+def deduplicate_long_rows(long_rows: Iterable[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    grouped: Dict[Tuple[str, str, str, str, str, str, str, str], List[Dict]] = defaultdict(list)
+    for row in long_rows:
+        grouped[_measurement_key(row)].append(dict(row))
+
+    deduplicated_rows: List[Dict] = []
+    duplicate_report_rows: List[Dict] = []
+
+    for key in sorted(grouped.keys()):
+        rows = grouped[key]
+        if len(rows) == 1:
+            deduplicated_rows.append(rows[0])
+            continue
+
+        values = [float(row["value"]) for row in rows]
+        tool_versions = sorted({str(row["tool_version"]) for row in rows})
+        min_value = min(values)
+        max_value = max(values)
+        mean_value = round(sum(values) / len(values), 6)
+
+        merged = dict(rows[0])
+        merged["value"] = mean_value
+        if len(tool_versions) > 1:
+            merged["tool_version"] = "|".join(tool_versions)
+        deduplicated_rows.append(merged)
+
+        duplicate_report_rows.append(
+            {
+                "project": key[0],
+                "run_id": key[1],
+                "timestamp_utc": key[2],
+                "component": key[3],
+                "component_type": key[4],
+                "metric": key[5],
+                "tool": key[6],
+                "variant": key[7],
+                "duplicate_count": len(rows),
+                "distinct_values": len({round(value, 12) for value in values}),
+                "min_value": min_value,
+                "max_value": max_value,
+                "mean_value": mean_value,
+                "tool_versions": "|".join(tool_versions),
+            }
+        )
+
+    return deduplicated_rows, duplicate_report_rows
+
+
 def build_wide_rows(long_rows: Iterable[Dict]) -> Tuple[List[str], List[Dict]]:
     row_map: Dict[Tuple[str, str, str, str, str], Dict[str, str]] = {}
     measure_columns = set()
@@ -226,6 +287,28 @@ def _write_csv(path: Path, columns: List[str], rows: Iterable[Dict]) -> None:
             writer.writerow(row)
 
 
+def _write_duplicate_report(path: Path, rows: List[Dict]) -> None:
+    if not rows:
+        return
+    columns = [
+        "project",
+        "run_id",
+        "timestamp_utc",
+        "component",
+        "component_type",
+        "metric",
+        "tool",
+        "variant",
+        "duplicate_count",
+        "distinct_values",
+        "min_value",
+        "max_value",
+        "mean_value",
+        "tool_versions",
+    ]
+    _write_csv(path, columns, rows)
+
+
 def _choose_primary_component_type(
     long_rows: List[Dict],
     requested_component_type: str = "",
@@ -247,9 +330,11 @@ def build_dataset(input_dir: Path, output_dir: Path, wide_component_type: str = 
 
     rows = read_jsonl_rows(input_dir)
     ok_rows = [row for row in rows if row.get("status") == "ok"]
-    long_rows = build_long_rows(ok_rows)
+    long_rows_raw = build_long_rows(ok_rows)
+    long_rows, duplicate_report_rows = deduplicate_long_rows(long_rows_raw)
     long_path = output_dir / "dataset_long.csv"
     _write_csv(long_path, LONG_COLUMNS, long_rows)
+    _write_duplicate_report(output_dir / "dataset_duplicate_measurements.csv", duplicate_report_rows)
 
     long_by_component_type: Dict[str, List[Dict]] = defaultdict(list)
     for row in long_rows:
@@ -289,10 +374,16 @@ def build_dataset(input_dir: Path, output_dir: Path, wide_component_type: str = 
         "ok_rows": len(ok_rows),
         "skipped_rows": max(0, len(rows) - len(ok_rows)),
         "long_rows": len(long_rows),
+        "long_rows_raw": len(long_rows_raw),
         "wide_rows": len(selected_wide_rows),
         "wide_measure_columns": len(selected_measure_columns),
         "wide_component_type": selected_component_type,
         "wide_component_types": len(long_by_component_type),
+        "duplicate_measurement_groups": len(duplicate_report_rows),
+        "duplicate_measurement_rows": max(0, len(long_rows_raw) - len(long_rows)),
+        "duplicate_measurement_conflicts": sum(
+            1 for row in duplicate_report_rows if int(row.get("distinct_values", 0)) > 1
+        ),
     }
 
 
@@ -318,9 +409,13 @@ def main() -> int:
         f"input_rows={summary['input_rows']} "
         f"ok_rows={summary['ok_rows']} "
         f"skipped_rows={summary['skipped_rows']} "
+        f"long_rows_raw={summary['long_rows_raw']} "
         f"long_rows={summary['long_rows']} "
         f"wide_rows={summary['wide_rows']} "
         f"wide_measure_columns={summary['wide_measure_columns']} "
+        f"duplicate_measurement_groups={summary['duplicate_measurement_groups']} "
+        f"duplicate_measurement_rows={summary['duplicate_measurement_rows']} "
+        f"duplicate_measurement_conflicts={summary['duplicate_measurement_conflicts']} "
         f"wide_component_type={summary['wide_component_type']}"
     )
     return 0

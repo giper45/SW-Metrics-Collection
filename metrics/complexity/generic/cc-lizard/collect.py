@@ -104,6 +104,15 @@ def build_method_component(file_path, project_path, function_name, start_line):
     return f"{rel}::{function_name}@L{int(start_line)}"
 
 
+def build_unique_method_component(file_path, project_path, function_name, start_line, seen_components):
+    base_component = build_method_component(file_path, project_path, function_name, start_line)
+    occurrence = int(seen_components.get(base_component, 0)) + 1
+    seen_components[base_component] = occurrence
+    if occurrence == 1:
+        return base_component, occurrence
+    return f"{base_component}#dup{occurrence}", occurrence
+
+
 def collect_project_rows(project, project_path, tool_version, timestamp, dry_run):
     source_files = list_source_files(project_path)
     if dry_run:
@@ -138,10 +147,17 @@ def collect_project_rows(project, project_path, tool_version, timestamp, dry_run
         return []
 
     rows = []
+    seen_components = {}
     for file_info in lizard.analyze(source_files):
         file_path = normalize_path(file_info.filename)
         for fn in file_info.function_list:
-            component = build_method_component(file_path, project_path, fn.name, fn.start_line)
+            component, occurrence = build_unique_method_component(
+                file_path=file_path,
+                project_path=project_path,
+                function_name=fn.name,
+                start_line=fn.start_line,
+                seen_components=seen_components,
+            )
             rows.append(
                 {
                     "project": project,
@@ -158,6 +174,7 @@ def collect_project_rows(project, project_path, tool_version, timestamp, dry_run
                         "method_name": str(fn.name),
                         "start_line": int(fn.start_line),
                         "end_line": int(fn.end_line),
+                        "component_collision_index": occurrence,
                         "nloc": int(getattr(fn, "length", 0)),
                         "include_tests": INCLUDE_TESTS,
                         "ignored_dirs": sorted(VENDOR_DIRS),

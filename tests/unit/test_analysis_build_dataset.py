@@ -1,5 +1,6 @@
 import csv
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -86,3 +87,79 @@ def test_build_dataset_rejects_missing_required_fields(tmp_path: Path):
 
     with pytest.raises(ValueError):
         module.build_dataset(input_dir, tmp_path / "out")
+
+
+def test_build_dataset_deduplicates_same_measurement_key(tmp_path: Path):
+    module = load_module(MODULE_PATH, "analysis_build_dataset_dedup")
+    input_dir = tmp_path / "results_normalized"
+    output_dir = tmp_path / "analysis_out"
+    input_dir.mkdir(parents=True, exist_ok=True)
+
+    rows = [
+        {
+            "schema_version": "1.0",
+            "run_id": "run-1",
+            "project": "repo-x",
+            "metric": "cc",
+            "variant": "lizard-default",
+            "component_type": "method",
+            "component": "src/A.java::foo@L10",
+            "status": "ok",
+            "value": 3.0,
+            "tool": "lizard",
+            "tool_version": "1.17.10",
+            "parameters": {},
+            "timestamp_utc": "2026-02-26T12:00:00Z",
+        },
+        {
+            "schema_version": "1.0",
+            "run_id": "run-1",
+            "project": "repo-x",
+            "metric": "cc",
+            "variant": "lizard-default",
+            "component_type": "method",
+            "component": "src/A.java::foo@L10",
+            "status": "ok",
+            "value": 5.0,
+            "tool": "lizard",
+            "tool_version": "1.17.10",
+            "parameters": {},
+            "timestamp_utc": "2026-02-26T12:00:00Z",
+        },
+        {
+            "schema_version": "1.0",
+            "run_id": "run-1",
+            "project": "repo-x",
+            "metric": "loc",
+            "variant": "cloc-default",
+            "component_type": "file",
+            "component": "src/A.java",
+            "status": "ok",
+            "value": 100.0,
+            "tool": "cloc",
+            "tool_version": "2.04",
+            "parameters": {},
+            "timestamp_utc": "2026-02-26T12:00:00Z",
+        },
+    ]
+
+    payload = "\n".join(json.dumps(row) for row in rows) + "\n"
+    (input_dir / "input.jsonl").write_text(payload, encoding="utf-8")
+
+    summary = module.build_dataset(input_dir, output_dir)
+    assert summary["input_rows"] == 3
+    assert summary["long_rows_raw"] == 3
+    assert summary["long_rows"] == 2
+    assert summary["duplicate_measurement_groups"] == 1
+    assert summary["duplicate_measurement_rows"] == 1
+    assert summary["duplicate_measurement_conflicts"] == 1
+
+    long_rows = read_csv_rows(output_dir / "dataset_long.csv")
+    assert len(long_rows) == 2
+    cc_row = next(row for row in long_rows if row["metric"] == "cc")
+    assert cc_row["value"] == "4.0"
+
+    duplicate_rows = read_csv_rows(output_dir / "dataset_duplicate_measurements.csv")
+    assert len(duplicate_rows) == 1
+    assert duplicate_rows[0]["metric"] == "cc"
+    assert duplicate_rows[0]["duplicate_count"] == "2"
