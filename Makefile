@@ -2,8 +2,16 @@ SRC_DIR := $(PWD)/src
 RESULTS_DIR := $(PWD)/results
 RESULTS_NORMALIZED_DIR := $(PWD)/results_normalized
 ANALYSIS_OUT_DIR := $(PWD)/analysis_out
+JAVA_BUILDER_DIR := $(PWD)/metrics/java-builder
 EXPERIMENT_RUN_ID := $(if $(METRIC_RUN_ID),$(METRIC_RUN_ID),$(shell python3 -c 'import uuid; print(uuid.uuid4())'))
-DOCKER_RUN_METRIC := docker run --rm -e METRIC_RUN_ID=$(EXPERIMENT_RUN_ID) -v $(SRC_DIR):/app:ro -v $(RESULTS_DIR):/results
+METRIC_RESOURCE_TRACKING ?= 0
+METRIC_RESOURCE_SAMPLE_SEC ?= 0.5
+METRIC_RESOURCE_REPORT ?= $(ANALYSIS_OUT_DIR)/metric-runtime-$(EXPERIMENT_RUN_ID).jsonl
+JAVA_BUILD_BYTECODE ?= 0
+JAVA_BUILD_STRICT ?= 0
+JAVA_BUILD_FORCE ?= 0
+DOCKER_RUN_METRIC_BASE := docker run --rm -e METRIC_RUN_ID=$(EXPERIMENT_RUN_ID) -v $(SRC_DIR):/app:ro -v $(RESULTS_DIR):/results
+DOCKER_RUN_METRIC := python3 -m analysis.metric_runtime_monitor --run-id $(EXPERIMENT_RUN_ID) --results-dir $(RESULTS_DIR) --enabled $(METRIC_RESOURCE_TRACKING) --sample-interval-sec $(METRIC_RESOURCE_SAMPLE_SEC) --out $(METRIC_RESOURCE_REPORT) -- $(DOCKER_RUN_METRIC_BASE)
 DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_common=$(PWD)/metrics/common
 
 .PHONY: \
@@ -16,8 +24,6 @@ DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_commo
 	collect-cc-ckjm \
 	collect-ce-ca-jdepend \
 	collect-ce-ca-ck-cbo \
-	collect-i-jdepend \
-	collect-i-ck-derived \
 	collect-lcom-ck \
 	collect-lcom-ckjm \
 	collect-duplication-jscpd \
@@ -28,10 +34,11 @@ DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_commo
 	collect-size-all \
 	collect-complexity-all \
 	collect-coupling-all \
-	collect-instability-all \
 	collect-cohesion-all \
 	collect-paper-extras \
 	collect-all \
+	prepare-java-bytecode \
+	prepare-java-bytecode-if-enabled \
 	clean-experiment \
 	print-run-id \
 	manifest \
@@ -90,14 +97,6 @@ collect-ce-ca-ck-cbo:
 	$(DOCKER_BUILD_METRIC) -t ce-ca-ck-cbo:latest metrics/coupling/java/ce-ca-ck-cbo
 	$(DOCKER_RUN_METRIC) ce-ca-ck-cbo:latest
 
-collect-i-jdepend:
-	$(DOCKER_BUILD_METRIC) -t i-jdepend:latest metrics/instability/java/i-jdepend
-	$(DOCKER_RUN_METRIC) i-jdepend:latest
-
-collect-i-ck-derived:
-	$(DOCKER_BUILD_METRIC) -t i-ck-derived:latest metrics/instability/java/i-ck-derived
-	$(DOCKER_RUN_METRIC) i-ck-derived:latest
-
 collect-lcom-ck:
 	$(DOCKER_BUILD_METRIC) -t lcom-ck:latest metrics/cohesion/java/lcom-ck
 	$(DOCKER_RUN_METRIC) lcom-ck:latest
@@ -129,9 +128,18 @@ collect-churn-git:
 collect-size-all: collect-loc-cloc collect-loc-tokei collect-loc-scc
 collect-complexity-all: collect-cc-lizard collect-cc-ckjm
 collect-coupling-all: collect-ce-ca-jdepend collect-ce-ca-ck-cbo
-collect-instability-all: collect-i-jdepend collect-i-ck-derived
 collect-cohesion-all: collect-lcom-ck collect-lcom-ckjm
 collect-paper-extras: collect-duplication-jscpd collect-mi-halstead-java collect-static-warnings-checkstyle collect-coverage-jacoco collect-churn-git
+
+prepare-java-bytecode:
+	python3 -m analysis.prepare_java_bytecode --src-dir $(SRC_DIR) --builder-dir $(JAVA_BUILDER_DIR) $(if $(filter 1,$(JAVA_BUILD_STRICT)),--strict,) $(if $(filter 1,$(JAVA_BUILD_FORCE)),--force,)
+
+prepare-java-bytecode-if-enabled:
+	@if [ "$(JAVA_BUILD_BYTECODE)" = "1" ]; then \
+		$(MAKE) prepare-java-bytecode JAVA_BUILD_STRICT=$(JAVA_BUILD_STRICT) JAVA_BUILD_FORCE=$(JAVA_BUILD_FORCE); \
+	else \
+		echo "Skipping Java bytecode build (set JAVA_BUILD_BYTECODE=1 to enable)"; \
+	fi
 
 clean-experiment:
 	rm -rf $(RESULTS_DIR) $(RESULTS_NORMALIZED_DIR) $(ANALYSIS_OUT_DIR)
@@ -139,8 +147,9 @@ clean-experiment:
 
 print-run-id:
 	@echo "Using METRIC_RUN_ID=$(EXPERIMENT_RUN_ID)"
+	@echo "Metric resource tracking=$(METRIC_RESOURCE_TRACKING) report=$(METRIC_RESOURCE_REPORT)"
 
-collect-all: print-run-id collect-size-all collect-complexity-all collect-coupling-all collect-instability-all collect-cohesion-all collect-paper-extras
+collect-all: print-run-id prepare-java-bytecode-if-enabled collect-size-all collect-complexity-all collect-coupling-all collect-cohesion-all collect-paper-extras
 
 manifest:
 	python3 -m analysis.build_manifest \
@@ -149,7 +158,7 @@ manifest:
 		--out $(RESULTS_DIR)/manifest-$(EXPERIMENT_RUN_ID).json \
 		--primary-component-type file \
 		--language java \
-		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,cc:lizard:lizard-default,wmc:ckjm:ckjm-raw,nom:ckjm:ckjm-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,instability:jdepend:jdepend-default,instability:ck:ck-derived,lcom:ck:ck-default,lcom:ckjm:ckjm-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,static-warnings:checkstyle:checkstyle-default,test-coverage:jacoco:jacoco-default,code-churn:git:git-default'
+		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,cc:lizard:lizard-default,wmc:ck:ck-raw,nom:ck:ck-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,lcom:ck:ck-default,lcom:ckjm:ckjm-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,static-warnings:checkstyle:checkstyle-default,test-coverage:jacoco:jacoco-default,code-churn:git:git-default'
 
 normalize:
 	python3 -m analysis.normalize $(RESULTS_DIR) $(RESULTS_NORMALIZED_DIR)
@@ -168,7 +177,11 @@ experiment: clean-experiment collect-all manifest normalize dataset agreement re
 experiments: experiment
 
 paper-tables:
-	@echo "paper-tables target is not implemented yet; add analysis/paper_tables.py then wire it here."
+	python3 -m analysis.paper_tables \
+		--agreement $(ANALYSIS_OUT_DIR)/agreement.csv \
+		--out-dir $(ANALYSIS_OUT_DIR) \
+		--tex-dir $(PWD)/paper/tables \
+		--min-common 2
 
 validate-results:
 	$(DOCKER_BUILD_METRIC) -t jsonl-schema-validator:latest metrics/validate-results/generic/jsonl-schema-validator
@@ -183,3 +196,7 @@ test-docker-matrix:
 
 clean:
 	rm -rf $(RESULTS_DIR)/* $(RESULTS_NORMALIZED_DIR)/* $(ANALYSIS_OUT_DIR)/*
+
+
+archive:
+	git archive -o sw-metrics-collection-$(shell git rev-parse --short HEAD).zip HEAD

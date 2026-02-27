@@ -81,6 +81,10 @@ def _status_from_counts(total_rows: int, run_ids: Set[str], missing_expected: Se
     return "ok"
 
 
+def _is_telemetry_jsonl(path: Path) -> bool:
+    return path.name.startswith("metric-runtime-")
+
+
 def build_manifest(
     results_dir: Path,
     run_id: str = "",
@@ -102,6 +106,8 @@ def build_manifest(
 
     for jsonl_path in sorted(results_dir.rglob("*.jsonl")):
         if not jsonl_path.is_file():
+            continue
+        if _is_telemetry_jsonl(jsonl_path):
             continue
 
         file_rows = 0

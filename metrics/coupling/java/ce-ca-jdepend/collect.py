@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import json
 import os
 import re
 import shlex
@@ -29,13 +28,18 @@ TOOL_JAR = "/opt/tools/jdepend.jar"
 
 VENDOR_DIRS = {"node_modules", "target", "build", ".venv", "venv", ".git"}
 TEST_DIR_NAMES = {"test", "tests", "__tests__", "spec", "specs", "testing"}
+BYTECODE_DIR_CANDIDATES = (
+    "target/classes",
+    "build/classes/java/main",
+    "build/classes/kotlin/main",
+    "build/classes",
+    "out/production",
+)
 
-PACKAGE_RE = re.compile(r"^Package\s+(.+)$")
+PACKAGE_RE = re.compile(r"^(?:-+\s*)?Package:?\s+(.+)$")
 CA_RE = re.compile(r"\bCa:\s*([0-9]+)")
 CE_RE = re.compile(r"\bCe:\s*([0-9]+)")
 I_RE = re.compile(r"\bI:\s*([0-9]*\.?[0-9]+)")
-JAVA_PACKAGE_DECL_RE = re.compile(r"^\s*package\s+([A-Za-z_][\w.]*)\s*;")
-JAVA_IMPORT_DECL_RE = re.compile(r"^\s*import\s+(?:static\s+)?([A-Za-z_][\w.]*)(?:\.\*)?\s*;")
 
 
 def utc_timestamp_now():
@@ -52,6 +56,22 @@ def is_ignored_dir(name):
 def is_test_dir(name):
     lowered = name.lower()
     return lowered in TEST_DIR_NAMES or lowered.startswith("test")
+
+
+def _env_flag(name, default=False):
+    raw = os.environ.get(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def allow_local_compile_fallback():
+    return _env_flag("JDEPEND_ENABLE_LOCAL_COMPILE_FALLBACK", default=True)
+
+
+def fallback_java_release():
+    raw = str(os.environ.get("JDEPEND_FALLBACK_JAVA_RELEASE", "8")).strip()
+    return raw if raw.isdigit() and int(raw) > 0 else "8"
 
 
 def discover_projects(app_dir):
@@ -91,38 +111,31 @@ def find_java_sources(module_path):
     return sources
 
 
-def infer_source_root(java_file):
-    directory = os.path.dirname(java_file)
-    try:
-        with open(java_file, "r", encoding="utf-8", errors="ignore") as handle:
-            for _ in range(80):
-                line = handle.readline()
-                if not line:
-                    break
-                stripped = line.strip()
-                if stripped.startswith("package ") and ";" in stripped:
-                    package_name = stripped[len("package ") : stripped.index(";")].strip()
-                    if not package_name:
-                        break
-                    suffix = os.path.join(*package_name.split("."))
-                    if directory.endswith(suffix):
-                        root = directory[: -len(suffix)].rstrip(os.sep)
-                        return root or os.sep
-                    break
-    except OSError:
-        return None
-    return None
+def discover_class_files(base_dir):
+    class_files = []
+    for root, dirnames, filenames in os.walk(base_dir):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        for filename in sorted(filenames):
+            if filename.endswith(".class") and not filename.startswith("."):
+                class_files.append(os.path.join(root, filename))
+    return class_files
 
 
-def discover_source_roots(project_path, module_sources):
-    roots = set()
-    for source in find_java_sources(project_path):
-        inferred = infer_source_root(source)
-        if inferred:
-            roots.add(inferred)
-    if roots:
-        return sorted(roots)
-    return sorted({os.path.dirname(source) for source in module_sources})
+def discover_module_class_files(module_path):
+    class_files = []
+    seen = set()
+    inputs = []
+    for rel_dir in BYTECODE_DIR_CANDIDATES:
+        candidate_dir = os.path.join(module_path, rel_dir)
+        if not os.path.isdir(candidate_dir):
+            continue
+        inputs.append(candidate_dir)
+        for class_file in discover_class_files(candidate_dir):
+            if class_file in seen:
+                continue
+            seen.add(class_file)
+            class_files.append(class_file)
+    return class_files, inputs
 
 
 def run_command(cmd, dry_run):
@@ -172,116 +185,268 @@ def parse_jdepend_text(raw_output):
     return packages
 
 
-def parse_java_packages_and_imports(sources):
-    package_to_imports = {}
-    package_names = set()
-
-    for source in sources:
-        package_name = None
-        imports = set()
-        try:
-            with open(source, "r", encoding="utf-8", errors="ignore") as handle:
-                for raw_line in handle:
-                    line = raw_line.strip()
-                    if not line or line.startswith("//") or line.startswith("*"):
-                        continue
-                    package_match = JAVA_PACKAGE_DECL_RE.match(line)
-                    if package_match:
-                        package_name = package_match.group(1).strip()
-                        continue
-                    import_match = JAVA_IMPORT_DECL_RE.match(line)
-                    if import_match:
-                        imports.add(import_match.group(1).strip())
-        except OSError:
-            continue
-
-        if not package_name:
-            continue
-
-        package_names.add(package_name)
-        package_to_imports.setdefault(package_name, set()).update(imports)
-
-    return package_names, package_to_imports
-
-
-def match_known_package(import_path, known_packages):
-    candidates = [
-        package
-        for package in known_packages
-        if import_path == package or import_path.startswith(package + ".")
-    ]
-    if not candidates:
-        return None
-    return max(candidates, key=len)
-
-
-def aggregate_source_ce_ca(sources):
-    package_names, package_to_imports = parse_java_packages_and_imports(sources)
-    if not package_names:
-        return 0.0, 0.0
-
-    ce_by_package = {}
-    for package in package_names:
-        deps = set()
-        for import_path in package_to_imports.get(package, set()):
-            matched = match_known_package(import_path, package_names)
-            if matched and matched != package:
-                deps.add(matched)
-        ce_by_package[package] = deps
-
-    ca_by_package = {package: set() for package in package_names}
-    for package, deps in ce_by_package.items():
-        for dep in deps:
-            ca_by_package.setdefault(dep, set()).add(package)
-
-    ce_total = float(sum(len(deps) for deps in ce_by_package.values()))
-    ca_total = float(sum(len(deps) for deps in ca_by_package.values()))
-    return ce_total, ca_total
-
-
-def aggregate_ce_ca(project_path, module_path, dry_run):
-    sources = find_java_sources(module_path)
-    if not sources:
-        return 0.0, 0.0
-
+def compile_module_sources(sources, dry_run):
     classes_dir = tempfile.mkdtemp(prefix="jdepend-classes-")
+    release = fallback_java_release()
+    cmd = ["javac", "--release", release, "-proc:none", "-Xlint:none", "-d", classes_dir]
+    cmd.extend(sources)
+    if dry_run:
+        print("DRY_RUN:", " ".join(shlex.quote(part) for part in cmd))
+        return {
+            "ok": True,
+            "classes_dir": classes_dir,
+            "class_files": [],
+            "stdout": "",
+            "stderr": "",
+            "exit_code": 0,
+            "release": release,
+        }
+    completed = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if completed.returncode != 0:
+        return {
+            "ok": False,
+            "classes_dir": classes_dir,
+            "class_files": [],
+            "stdout": completed.stdout or "",
+            "stderr": completed.stderr or "",
+            "exit_code": int(completed.returncode),
+            "release": release,
+        }
+    return {
+        "ok": True,
+        "classes_dir": classes_dir,
+        "class_files": discover_class_files(classes_dir),
+        "stdout": completed.stdout or "",
+        "stderr": completed.stderr or "",
+        "exit_code": int(completed.returncode),
+        "release": release,
+    }
+
+
+def aggregate_ce_ca(module_path, dry_run):
+    sources = find_java_sources(module_path)
+    prebuilt_class_files, prebuilt_inputs = discover_module_class_files(module_path)
+    cleanup_dir = None
+    class_files = list(prebuilt_class_files)
+    jdepend_inputs = list(prebuilt_inputs)
+    bytecode_mode = "prebuilt"
+    compile_exit_code = None
+    compile_release = None
+
     try:
-        javac_cmd = ["javac", "-proc:none", "-Xlint:none", "-d", classes_dir]
-        source_roots = discover_source_roots(project_path, sources)
-        if source_roots:
-            javac_cmd.extend(["-sourcepath", os.pathsep.join(source_roots)])
-        javac_cmd.extend(sources)
-
         if dry_run:
-            print("DRY_RUN:", " ".join(shlex.quote(part) for part in javac_cmd))
-            return 0.0, 0.0
-        subprocess.run(javac_cmd, capture_output=True, text=True, check=False)
+            if class_files:
+                print(
+                    "DRY_RUN:",
+                    " ".join(
+                        shlex.quote(part)
+                        for part in ["java", "-cp", TOOL_JAR, "jdepend.textui.JDepend", *jdepend_inputs]
+                    ),
+                )
+            elif sources and allow_local_compile_fallback():
+                compiled = compile_module_sources(sources, dry_run=True)
+                cleanup_dir = compiled["classes_dir"]
+                compile_release = compiled.get("release")
+                print(
+                    "DRY_RUN:",
+                    " ".join(
+                        shlex.quote(part)
+                        for part in ["java", "-cp", TOOL_JAR, "jdepend.textui.JDepend", compiled["classes_dir"]]
+                    ),
+                )
+            return {
+                "status": "ok",
+                "ce": 0.0,
+                "ca": 0.0,
+                "class_files_found": len(class_files),
+                "java_sources_found": len(sources),
+                "bytecode_inputs": jdepend_inputs,
+                "bytecode_mode": bytecode_mode if class_files else "dry-run",
+                "compile_exit_code": compile_exit_code,
+                "compile_release": compile_release,
+            }
 
-        class_files = []
-        for root, _, filenames in os.walk(classes_dir):
-            for filename in filenames:
-                if filename.endswith(".class"):
-                    class_files.append(os.path.join(root, filename))
+        if not class_files:
+            if not sources:
+                return {
+                    "status": "ok",
+                    "ce": 0.0,
+                    "ca": 0.0,
+                    "class_files_found": 0,
+                    "java_sources_found": 0,
+                    "bytecode_inputs": [],
+                    "bytecode_mode": "not-applicable",
+                    "compile_exit_code": compile_exit_code,
+                    "compile_release": compile_release,
+                }
 
-        output = ""
+        prebuilt_skip_reason = None
         if class_files:
-            output = run_command(["java", "-cp", TOOL_JAR, "jdepend.textui.JDepend", classes_dir], dry_run)
-        if dry_run:
-            return 0.0, 0.0
-        packages = parse_jdepend_text(output)
-        if packages:
-            ce_total = sum(item.get("ce", 0) for item in packages.values())
-            ca_total = sum(item.get("ca", 0) for item in packages.values())
-            return float(ce_total), float(ca_total)
+            try:
+                output = run_command(["java", "-cp", TOOL_JAR, "jdepend.textui.JDepend", *jdepend_inputs], dry_run=False)
+                packages = parse_jdepend_text(output)
+                if packages:
+                    ce_total = float(sum(item.get("ce", 0) for item in packages.values()))
+                    ca_total = float(sum(item.get("ca", 0) for item in packages.values()))
+                    return {
+                        "status": "ok",
+                        "ce": ce_total,
+                        "ca": ca_total,
+                        "class_files_found": len(class_files),
+                        "java_sources_found": len(sources),
+                        "bytecode_inputs": jdepend_inputs,
+                        "bytecode_mode": bytecode_mode,
+                        "compile_exit_code": compile_exit_code,
+                        "compile_release": compile_release,
+                    }
+                prebuilt_skip_reason = "jdepend_empty_output"
+            except RuntimeError:
+                prebuilt_skip_reason = "jdepend_execution_failed"
 
-        ce_total, ca_total = aggregate_source_ce_ca(sources)
-        return ce_total, ca_total
+        if sources and allow_local_compile_fallback():
+            compiled = compile_module_sources(sources, dry_run=False)
+            cleanup_dir = compiled["classes_dir"]
+            compile_exit_code = compiled["exit_code"]
+            compile_release = compiled.get("release")
+            if not compiled["ok"]:
+                skip_reason = "missing_bytecode_compile_failed"
+                if prebuilt_skip_reason:
+                    skip_reason = f"{prebuilt_skip_reason}_compile_failed"
+                return {
+                    "status": "skipped",
+                    "skip_reason": skip_reason,
+                    "ce": None,
+                    "ca": None,
+                    "class_files_found": len(class_files),
+                    "java_sources_found": len(sources),
+                    "bytecode_inputs": jdepend_inputs,
+                    "bytecode_mode": "missing" if not class_files else "prebuilt",
+                    "compile_exit_code": compile_exit_code,
+                    "compile_release": compile_release,
+                }
+            compiled_class_files = list(compiled.get("class_files", []))
+            if not compiled_class_files:
+                return {
+                    "status": "skipped",
+                    "skip_reason": "missing_bytecode_compile_empty",
+                    "ce": None,
+                    "ca": None,
+                    "class_files_found": len(class_files),
+                    "java_sources_found": len(sources),
+                    "bytecode_inputs": jdepend_inputs,
+                    "bytecode_mode": "missing" if not class_files else "prebuilt",
+                    "compile_exit_code": compile_exit_code,
+                    "compile_release": compile_release,
+                }
+            try:
+                local_inputs = [compiled["classes_dir"]]
+                output = run_command(["java", "-cp", TOOL_JAR, "jdepend.textui.JDepend", *local_inputs], dry_run=False)
+            except RuntimeError:
+                return {
+                    "status": "skipped",
+                    "skip_reason": "jdepend_execution_failed",
+                    "ce": None,
+                    "ca": None,
+                    "class_files_found": len(compiled_class_files),
+                    "java_sources_found": len(sources),
+                    "bytecode_inputs": local_inputs,
+                    "bytecode_mode": "local-compile",
+                    "compile_exit_code": compile_exit_code,
+                    "compile_release": compile_release,
+                }
+            packages = parse_jdepend_text(output)
+            if packages:
+                ce_total = float(sum(item.get("ce", 0) for item in packages.values()))
+                ca_total = float(sum(item.get("ca", 0) for item in packages.values()))
+                return {
+                    "status": "ok",
+                    "ce": ce_total,
+                    "ca": ca_total,
+                    "class_files_found": len(compiled_class_files),
+                    "java_sources_found": len(sources),
+                    "bytecode_inputs": local_inputs,
+                    "bytecode_mode": "local-compile",
+                    "compile_exit_code": compile_exit_code,
+                    "compile_release": compile_release,
+                }
+            return {
+                "status": "skipped",
+                "skip_reason": "jdepend_empty_output",
+                "ce": None,
+                "ca": None,
+                "class_files_found": len(compiled_class_files),
+                "java_sources_found": len(sources),
+                "bytecode_inputs": local_inputs,
+                "bytecode_mode": "local-compile",
+                "compile_exit_code": compile_exit_code,
+                "compile_release": compile_release,
+            }
+
+        if prebuilt_skip_reason:
+            return {
+                "status": "skipped",
+                "skip_reason": prebuilt_skip_reason,
+                "ce": None,
+                "ca": None,
+                "class_files_found": len(class_files),
+                "java_sources_found": len(sources),
+                "bytecode_inputs": jdepend_inputs,
+                "bytecode_mode": "prebuilt",
+                "compile_exit_code": compile_exit_code,
+                "compile_release": compile_release,
+            }
+
+        return {
+            "status": "skipped",
+            "skip_reason": "missing_bytecode",
+            "ce": None,
+            "ca": None,
+            "class_files_found": 0,
+            "java_sources_found": len(sources),
+            "bytecode_inputs": list(prebuilt_inputs),
+            "bytecode_mode": "missing",
+            "compile_exit_code": compile_exit_code,
+            "compile_release": compile_release,
+        }
     finally:
-        shutil.rmtree(classes_dir, ignore_errors=True)
+        if cleanup_dir:
+            shutil.rmtree(cleanup_dir, ignore_errors=True)
 
 
 def output_path(results_dir, project, timestamp):
     return os.path.join(results_dir, f"{project}-{timestamp}-{METRIC_NAME}-{TOOL_NAME}-{VARIANT_NAME}.jsonl")
+
+
+def build_dimension_row(project, module, dimension, module_stats, timestamp, version):
+    status = str(module_stats.get("status", "ok"))
+    row = {
+        "project": project,
+        "metric": METRIC_NAME,
+        "variant": VARIANT_NAME,
+        "component_type": "module",
+        "component": module,
+        "value": float(module_stats[dimension]) if status == "ok" else None,
+        "tool": TOOL_NAME,
+        "tool_version": version,
+        "parameters": {
+            "category": "coupling",
+            "dimension": dimension,
+            "metric_source": "jdepend-bytecode",
+            "bytecode_mode": module_stats.get("bytecode_mode", "unknown"),
+            "bytecode_inputs": list(module_stats.get("bytecode_inputs", [])),
+            "class_files_found": int(module_stats.get("class_files_found", 0)),
+            "java_sources_found": int(module_stats.get("java_sources_found", 0)),
+            "compile_exit_code": module_stats.get("compile_exit_code"),
+            "compile_release": module_stats.get("compile_release"),
+            "ignored_dirs": sorted(VENDOR_DIRS),
+            "exclude_tests": True,
+        },
+        "timestamp_utc": timestamp,
+    }
+    if status == "skipped":
+        row["status"] = "skipped"
+        row["skip_reason"] = str(module_stats.get("skip_reason", "invalid_module_input"))
+    return row
 
 
 def main():
@@ -305,47 +470,9 @@ def main():
     for project, project_path in projects:
         rows = []
         for module, module_path in discover_modules(project, project_path):
-            ce_value, ca_value = aggregate_ce_ca(project_path, module_path, args.dry_run)
-            rows.append(
-                {
-                    "project": project,
-                    "metric": METRIC_NAME,
-                    "variant": VARIANT_NAME,
-                    "component_type": "module",
-                    "component": module,
-                    "value": ce_value,
-                    "tool": TOOL_NAME,
-                    "tool_version": version,
-                    "parameters": {
-                        "category": "coupling",
-                        "dimension": "ce",
-                        "fallback": "source-package-dependency-when-jdepend-empty",
-                        "ignored_dirs": sorted(VENDOR_DIRS),
-                        "exclude_tests": True,
-                    },
-                    "timestamp_utc": timestamp,
-                }
-            )
-            rows.append(
-                {
-                    "project": project,
-                    "metric": METRIC_NAME,
-                    "variant": VARIANT_NAME,
-                    "component_type": "module",
-                    "component": module,
-                    "value": ca_value,
-                    "tool": TOOL_NAME,
-                    "tool_version": version,
-                    "parameters": {
-                        "category": "coupling",
-                        "dimension": "ca",
-                        "fallback": "source-package-dependency-when-jdepend-empty",
-                        "ignored_dirs": sorted(VENDOR_DIRS),
-                        "exclude_tests": True,
-                    },
-                    "timestamp_utc": timestamp,
-                }
-            )
+            module_stats = aggregate_ce_ca(module_path, args.dry_run)
+            rows.append(build_dimension_row(project, module, "ce", module_stats, timestamp, version))
+            rows.append(build_dimension_row(project, module, "ca", module_stats, timestamp, version))
 
         target = output_path(args.results_dir, project, timestamp)
         if args.dry_run:

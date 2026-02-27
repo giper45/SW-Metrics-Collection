@@ -1,0 +1,24 @@
+@startuml
+title analysis.build_dataset - Dataset construction
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+component "build_dataset.py\npython -m analysis.build_dataset" as ds
+database "results_normalized/\nnormalized JSONL" as norm
+database "analysis_out/" as out
+file "dataset_long.csv" as long
+file "dataset_wide_<component_type>.csv" as wide
+
+norm --> ds : read normalized rows
+ds --> long : append long-form rows\n(project, component, metric, tool, value,...)
+ds --> wide : pivot to wide format\n(one row per component)
+
+ds --> out : write supporting artifacts\n(e.g. metadata summaries)
+
+note right of ds
+Makefile target: dataset
+Key arg:
+--wide-component-type file
+end note
+
+@enduml

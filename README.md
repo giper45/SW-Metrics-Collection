@@ -7,9 +7,9 @@ Container-based scaffold for software metric experiments, focused on Java projec
 | Category | Metric | Tool / Variant |
 |---|---|---|
 | Size | LOC | `loc-cloc`, `loc-tokei`, `loc-scc` |
-| Complexity | CC | `cc-lizard`, `cc-ckjm` (raw `wmc/nom`, normalized downstream) |
+| Complexity | CC | `cc-lizard`, `cc-ckjm` (collector uses CK `wmc/nom`, normalized downstream) |
 | Coupling | Ce/Ca | `ce-ca-jdepend`, `ce-ca-ck-cbo` (CK proxy) |
-| Instability | I | `i-jdepend`, `i-ck-derived` |
+| Instability | I | derived in normalization from `ce-ca` (`*-derived`) |
 | Cohesion | LCOM | `lcom-ck`, `lcom-ckjm` |
 | Duplication | Duplication rate | `duplication-jscpd` |
 | Maintainability | Maintainability Index (+ Halstead aggregates) | `mi-halstead-java` |
@@ -17,14 +17,13 @@ Container-based scaffold for software metric experiments, focused on Java projec
 | Testing | Coverage ratio | `coverage-jacoco` |
 | Evolution | Code churn | `churn-git` |
 
-Implemented metric containers: **16**.
+Implemented metric containers: **14**.
 
 ## Repository Structure
 
 - `metrics/size/generic/`
 - `metrics/complexity/generic/`, `metrics/complexity/java/`, `metrics/complexity/python/`
 - `metrics/coupling/java/`
-- `metrics/instability/java/`
 - `metrics/cohesion/java/`
 - `metrics/duplication/java/`
 - `metrics/maintainability/java/`
@@ -56,8 +55,6 @@ make collect-cc-lizard
 make collect-cc-ckjm
 make collect-ce-ca-jdepend
 make collect-ce-ca-ck-cbo
-make collect-i-jdepend
-make collect-i-ck-derived
 make collect-lcom-ck
 make collect-lcom-ckjm
 ```
@@ -80,7 +77,7 @@ make validate-results
 
 ## One-Command Experiment Pipeline
 
-Run full collection + manifest + normalization + dataset build + agreement:
+Run full collection + manifest + normalization + dataset build + agreement + report generation:
 
 ```bash
 make experiment
@@ -94,6 +91,58 @@ make manifest
 make normalize
 make dataset
 make agreement
+make report
+```
+
+Optional runtime telemetry with `make` (disabled by default):
+
+```bash
+METRIC_RESOURCE_TRACKING=1 make experiment
+```
+
+Optional tuning:
+
+```bash
+METRIC_RESOURCE_TRACKING=1 \
+METRIC_RESOURCE_SAMPLE_SEC=0.25 \
+METRIC_RESOURCE_REPORT=analysis_out/metric-runtime-custom.jsonl \
+make experiment
+```
+
+Optional Java bytecode preparation (recommended for bytecode-based metrics, e.g. `lcom-ckjm`):
+
+```bash
+JAVA_BUILD_BYTECODE=1 make experiment
+```
+
+The bytecode phase uses versioned `java-builder` Docker images and compiles repositories in `src/`
+before collection. Useful flags:
+
+```bash
+JAVA_BUILD_BYTECODE=1 JAVA_BUILD_STRICT=1 make experiment
+JAVA_BUILD_BYTECODE=1 JAVA_BUILD_FORCE=1 make experiment
+```
+
+- `JAVA_BUILD_STRICT=1`: fail experiment if any repository build fails.
+- `JAVA_BUILD_FORCE=1`: rebuild even if `.class` files already exist.
+
+You can also run only the build phase:
+
+```bash
+make prepare-java-bytecode
+```
+
+When enabled, one JSONL row per metric container run is appended to:
+
+- `analysis_out/metric-runtime-<run_id>.jsonl` (or `METRIC_RESOURCE_REPORT` if set)
+
+Each row includes start/end timestamps, duration, sampled CPU (%), peak RAM (bytes), container image, and exit status.
+Telemetry JSONL files named `metric-runtime-*.jsonl` are excluded from normalization/dataset/manifest inputs.
+
+`run_experiment.sh` enables runtime telemetry by default (`METRIC_RESOURCE_TRACKING=1`), and you can override:
+
+```bash
+METRIC_RESOURCE_TRACKING=0 bash run_experiment.sh
 ```
 
 Output folders:
@@ -177,10 +226,9 @@ Expected files in `results/` include:
 
 - `thealgorithms-java-<timestamp>-loc-cloc-cloc-default.jsonl`
 - `thealgorithms-java-<timestamp>-cc-lizard-lizard-default.jsonl`
-- `thealgorithms-java-<timestamp>-wmc-ckjm-ckjm-raw.jsonl`
+- `thealgorithms-java-<timestamp>-wmc-ck-ck-raw.jsonl`
 - `thealgorithms-java-<timestamp>-ce-ca-jdepend-jdepend-default.jsonl`
 - `thealgorithms-java-<timestamp>-ce-ca-ck-ck-ce-ca-proxy.jsonl`
-- `thealgorithms-java-<timestamp>-instability-jdepend-jdepend-default.jsonl`
 - `thealgorithms-java-<timestamp>-lcom-ck-ck-default.jsonl`
 - `thealgorithms-java-<timestamp>-lcom-ckjm-ckjm-default.jsonl`
 - `thealgorithms-java-<timestamp>-duplication-rate-jscpd-jscpd-default.jsonl`
@@ -231,10 +279,10 @@ Field meaning:
 ## Metric Value Semantics
 
 - `loc`: file-level code lines
-- `cc`: method-level direct value from tool where applicable (for CKJM, comparable CC is still derived in `results_normalized/`)
-- `wmc`/`nom`: raw CKJM complexity components used to derive `cc` proxy downstream
+- `cc`: method-level direct value from tool where applicable (for CK raw WMC/NOM, comparable CC is derived in `results_normalized/`)
+- `wmc`/`nom`: raw CK complexity components used to derive `cc` proxy downstream
 - `ce-ca`: two rows per module (`parameters.dimension=ce` and `ca`)
-- `instability`: module-level instability ratio
+- `instability`: derived per component in normalization as `Ce/(Ce+Ca)` from the same tool/variant Ce/Ca pair; when `Ce+Ca=0`, row is `status=skipped` with `value=null`
 - `lcom`: module mean LCOM
 - `duplication-rate`: ratio `[0,1]`
 - `maintainability-index`: score `[0,100]` (Halstead aggregates in `parameters`)
@@ -292,5 +340,21 @@ bash init_repositories.sh
 2. Run the experiment:
 
 ```bash 
-run_experiment.sh
+bash run_experiment.sh
+```
+
+`run_experiment.sh` defaults:
+
+- generates a new `METRIC_RUN_ID`
+- enables resource tracking (`METRIC_RESOURCE_TRACKING=1`)
+- sampling interval `METRIC_RESOURCE_SAMPLE_SEC=0.5`
+- telemetry output `analysis_out/metric-runtime-<run_id>.jsonl`
+
+Override example:
+
+```bash
+METRIC_RESOURCE_TRACKING=1 \
+METRIC_RESOURCE_SAMPLE_SEC=0.25 \
+METRIC_RESOURCE_REPORT=analysis_out/metric-runtime-custom.jsonl \
+bash run_experiment.sh
 ```

@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 import argparse
-import csv
-import json
+import math
 import os
 import shlex
-import shutil
 import subprocess
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
@@ -25,9 +22,17 @@ from result_writer import filter_projects, generate_run_id, run_collector, write
 METRIC_NAME = "lcom"
 VARIANT_NAME = "ckjm-default"
 TOOL_NAME = "ckjm"
-TOOL_JAR = "/opt/tools/ck.jar"
+CKJM_MAIN_CLASS = "gr.spinellis.ckjm.MetricsFilter"
+CKJM_CLASSPATH = "/opt/tools/ckjm.jar:/opt/tools/commons-lang3.jar"
 
 VENDOR_DIRS = {"node_modules", "target", "build", ".venv", "venv", ".git"}
+BYTECODE_DIR_CANDIDATES = (
+    "target/classes",
+    "build/classes/java/main",
+    "build/classes/kotlin/main",
+    "build/classes",
+    "out/production",
+)
 
 
 def utc_timestamp_now():
@@ -66,81 +71,111 @@ def discover_modules(project_name, project_path):
     return modules or [(project_name, project_path)]
 
 
-def run_command(cmd, dry_run):
+def run_command(cmd, dry_run, stdin_text=""):
     if dry_run:
         print("DRY_RUN:", " ".join(shlex.quote(part) for part in cmd))
         return
-    completed = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    completed = subprocess.run(
+        cmd,
+        input=str(stdin_text),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if completed.returncode != 0:
         raise RuntimeError(
             f"command failed ({completed.returncode}): {' '.join(cmd)}\\n"
             f"stdout: {completed.stdout}\\n"
             f"stderr: {completed.stderr}"
         )
+    return completed.stdout or ""
 
 
-def choose_ck_input_path(module_path):
-    candidates = [
-        os.path.join(module_path, "main", "java"),
-        os.path.join(module_path, "src", "main", "java"),
-        module_path,
-    ]
-    for candidate in candidates:
-        if os.path.isdir(candidate):
-            return candidate
-    return module_path
+def discover_class_files(base_dir):
+    files = []
+    for root, dirnames, filenames in os.walk(base_dir):
+        dirnames[:] = sorted(d for d in dirnames if not is_ignored_dir(d))
+        for filename in sorted(filenames):
+            if filename.endswith(".class") and not filename.startswith("."):
+                files.append(os.path.join(root, filename))
+    return files
 
 
-def resolve_ck_csv_path(out_dir, filename):
-    path = os.path.join(out_dir, filename)
-    if os.path.isfile(path):
-        return path
-    fallback = f"{out_dir}{filename}"
-    if os.path.isfile(fallback):
-        return fallback
-    return path
+def discover_module_class_files(module_path):
+    class_files = []
+    seen = set()
+    for rel_dir in BYTECODE_DIR_CANDIDATES:
+        candidate_dir = os.path.join(module_path, rel_dir)
+        if not os.path.isdir(candidate_dir):
+            continue
+        for path in discover_class_files(candidate_dir):
+            if path in seen:
+                continue
+            seen.add(path)
+            class_files.append(path)
+    return class_files
 
 
-def parse_ck_csv(class_csv_path):
-    rows = []
-    if not os.path.isfile(class_csv_path):
-        return rows
-    with open(class_csv_path, "r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            rows.append({k.strip().lower(): v for k, v in row.items()})
-    return rows
+def safe_float(value):
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = float(raw)
+    except ValueError:
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
 
 
-def mean_numeric(rows, key):
+def parse_ckjm_lcom_values(raw_output):
     values = []
-    for row in rows:
-        raw = row.get(key)
-        if raw is None or raw == "":
+    for line in str(raw_output or "").splitlines():
+        parts = line.strip().split()
+        if len(parts) < 7:
             continue
-        try:
-            values.append(float(raw))
-        except ValueError:
+        # CKJM plain output format:
+        # class WMC DIT NOC CBO RFC LCOM Ca NPM
+        lcom_value = safe_float(parts[6])
+        if lcom_value is None:
             continue
+        values.append(float(lcom_value))
+    return values
+
+
+def mean_numeric(values):
     if not values:
         return 0.0
     return round(sum(values) / len(values), 6)
 
 
-def collect_module_value(module_path, dry_run):
-    out_dir = tempfile.mkdtemp(prefix="ck-out-")
-    try:
-        ck_input = choose_ck_input_path(module_path)
-        run_command(
-            ["java", "-jar", TOOL_JAR, ck_input, "false", "0", "false", out_dir + os.sep],
-            dry_run,
-        )
-        if dry_run:
-            return 0.0
-        rows = parse_ck_csv(resolve_ck_csv_path(out_dir, "class.csv"))
-        return mean_numeric(rows, "lcom")
-    finally:
-        shutil.rmtree(out_dir, ignore_errors=True)
+def collect_module_stats(module_path, dry_run):
+    class_files = discover_module_class_files(module_path)
+    if not class_files:
+        return {"value": 0.0, "class_files_found": 0, "classes_measured": 0}
+
+    output = run_command(
+        [
+            "java",
+            "-cp",
+            CKJM_CLASSPATH,
+            CKJM_MAIN_CLASS,
+        ],
+        dry_run,
+        stdin_text="\n".join(class_files) + "\n",
+    )
+    if dry_run:
+        return {"value": 0.0, "class_files_found": len(class_files), "classes_measured": 0}
+
+    lcom_values = parse_ckjm_lcom_values(output)
+    return {
+        "value": mean_numeric(lcom_values),
+        "class_files_found": len(class_files),
+        "classes_measured": len(lcom_values),
+    }
 
 
 def output_path(results_dir, project, timestamp):
@@ -168,6 +203,7 @@ def main():
     for project, project_path in projects:
         rows = []
         for module, module_path in discover_modules(project, project_path):
+            module_stats = collect_module_stats(module_path, args.dry_run)
             rows.append(
                 {
                     "project": project,
@@ -175,14 +211,17 @@ def main():
                     "variant": VARIANT_NAME,
                     "component_type": "module",
                     "component": module,
-                    "value": collect_module_value(module_path, args.dry_run),
+                    "value": module_stats["value"],
                     "tool": TOOL_NAME,
                     "tool_version": version,
                     "parameters": {
                         "category": "cohesion",
                         "aggregation": "class_lcom_mean",
+                        "metric_source": "dspinellis-ckjm-bytecode",
+                        "class_files_found": int(module_stats["class_files_found"]),
+                        "classes_measured": int(module_stats["classes_measured"]),
                         "ignored_dirs": sorted(VENDOR_DIRS),
-                        "tool_output": "class.csv",
+                        "tool_output": "plain-text",
                     },
                     "timestamp_utc": timestamp,
                 }

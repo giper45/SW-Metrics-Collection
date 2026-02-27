@@ -1,0 +1,46 @@
+@startuml
+title Experiment Pipeline - Sequence
+hide footbox
+
+actor User
+participant "Makefile" as Make
+participant "Docker" as Docker
+participant "Metric Container" as MC
+database "results/" as Results
+participant "analysis.build_manifest" as Manifest
+participant "analysis.normalize" as Normalize
+participant "analysis.build_dataset" as Dataset
+participant "analysis.agreement" as Agreement
+participant "analysis.report_repository" as Report
+database "results_normalized/" as Norm
+database "analysis_out/" as Out
+
+User -> Make : make experiment
+Make -> Make : clean-experiment
+Make -> Docker : docker build/run (collect-all)
+loop for each metric container
+  Docker -> MC : run (/app ro, /results rw)
+  MC -> Results : write <project>-<ts>-<metric>-<tool>-<variant>.jsonl
+end
+
+Make -> Manifest : python -m analysis.build_manifest
+Manifest -> Results : read jsonl files\n+ detect coverage
+Manifest -> Results : write manifest-<run_id>.json
+
+Make -> Normalize : python -m analysis.normalize
+Normalize -> Results : read raw jsonl\n+ manifest (if present)
+Normalize -> Norm : write normalized jsonl
+
+Make -> Dataset : python -m analysis.build_dataset
+Dataset -> Norm : read normalized jsonl
+Dataset -> Out : write dataset_long.csv\n+ dataset_wide_*.csv
+
+Make -> Agreement : python -m analysis.agreement
+Agreement -> Out : read dataset_long.csv
+Agreement -> Out : write agreement.csv
+
+Make -> Report : python -m analysis.report_repository
+Report -> Norm : read normalized jsonl
+Report -> Out : read dataset_long.csv
+Report -> Out : write repo_report.csv\nrepo_report.json
+@enduml

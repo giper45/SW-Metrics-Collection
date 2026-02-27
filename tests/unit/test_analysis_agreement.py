@@ -60,8 +60,8 @@ def test_run_agreement_builds_pairwise_intra_metric_rows(tmp_path: Path):
         # CC with two tools and two shared modules => 1 pair.
         {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-24T15:04:05Z", "component": "m1", "component_type": "module", "metric": "cc", "tool": "lizard", "variant": "lizard-default", "value": 4.0, "tool_version": "1.0"},
         {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-24T15:04:05Z", "component": "m2", "component_type": "module", "metric": "cc", "tool": "lizard", "variant": "lizard-default", "value": 5.0, "tool_version": "1.0"},
-        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-24T15:04:05Z", "component": "m1", "component_type": "module", "metric": "cc", "tool": "ckjm", "variant": "ckjm-normalized", "value": 3.0, "tool_version": "1.0"},
-        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-24T15:04:05Z", "component": "m2", "component_type": "module", "metric": "cc", "tool": "ckjm", "variant": "ckjm-normalized", "value": 6.0, "tool_version": "1.0"},
+        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-24T15:04:05Z", "component": "m1", "component_type": "module", "metric": "cc", "tool": "ck", "variant": "ck-normalized", "value": 3.0, "tool_version": "0.7.0"},
+        {"project": "repo-a", "run_id": "run-1", "timestamp_utc": "2026-02-24T15:04:05Z", "component": "m2", "component_type": "module", "metric": "cc", "tool": "ck", "variant": "ck-normalized", "value": 6.0, "tool_version": "0.7.0"},
     ]
     write_csv(input_csv, columns, rows)
 

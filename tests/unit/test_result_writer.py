@@ -70,13 +70,13 @@ def test_write_jsonl_rows_accepts_submetric_optional(tmp_path):
         {
             "project": "repo-alpha",
             "metric": "cc",
-            "variant": "ckjm-normalized",
+            "variant": "ck-normalized",
             "component_type": "module",
             "component": "module-core",
             "submetric": "cc_proxy_mean",
             "value": 3.0,
-            "tool": "ckjm",
-            "tool_version": "1.9",
+            "tool": "ck",
+            "tool_version": "0.7.0",
             "parameters": {},
             "timestamp_utc": "2026-02-24T15:04:05Z",
         }

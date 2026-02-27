@@ -29,3 +29,11 @@ results_normalized/
 
 
 paper
+
+.vscode
+
+results_normalized
+results_normalized_filtered2/**
+
+
+analysis_out

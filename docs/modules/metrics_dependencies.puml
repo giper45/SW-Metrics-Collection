@@ -1,0 +1,70 @@
+@startuml
+title Metric containers - semantic dependency graph (containers + derived metrics)
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+' --- Containers (producers) ---
+package "Metric Containers (Docker)" {
+  [ce-ca-jdepend\n(metrics/coupling/java/ce-ca-jdepend)] as C_JDEPEND
+  [ce-ca-ck-cbo\n(metrics/coupling/java/ce-ca-ck-cbo)] as C_CK_CBO
+
+  [lcom-ckjm\n(metrics/cohesion/java/lcom-ckjm)] as C_LCOM_CKJM
+  [lcom-ck\n(metrics/cohesion/java/lcom-ck)] as C_LCOM_CK
+
+  [cc-ckjm\n(metrics/complexity/java/cc-ckjm)] as C_CC_CKJM
+  [cc-lizard\n(metrics/complexity/generic/cc-lizard)] as C_CC_LIZARD
+  [cc-radon\n(metrics/complexity/python/cc-radon)] as C_CC_RADON
+
+  [loc-cloc\n(metrics/**/loc-cloc)] as C_LOC_CLOC
+  [loc-tokei\n(metrics/**/loc-tokei)] as C_LOC_TOKEI
+
+  [halstead-javancss\n(metrics/volume/java/halstead-javancss)] as C_HAL_JAVANCSS
+  [halstead-radon\n(metrics/volume/python/halstead-radon)] as C_HAL_RADON
+
+  [churn-git\n(metrics/evolution/generic/churn-git)] as C_CHURN_GIT
+
+  [duplication-jscpd\n(metrics/duplication/java/duplication-jscpd)] as C_DUP_JSCPD
+}
+
+' --- Normalized data layer ---
+database "Normalized\nresults_normalized/*.jsonl" as D_NORM
+
+' --- Analysis / Derived metrics ---
+package "Derived Metrics (Analysis)" {
+  [Instability\nI = Ce / (Ca + Ce)] as M_INSTABILITY
+  [Abstractness\nA = Na / Nc] as M_ABSTRACTNESS
+  [Distance from Main\nD = |A + I - 1|] as M_DISTANCE
+}
+
+' --- Producers -> normalized layer (conceptual) ---
+C_JDEPEND --> D_NORM : produces Ca, Ce (+ packages)
+C_CK_CBO --> D_NORM : produces coupling variants
+C_LCOM_CKJM --> D_NORM
+C_LCOM_CK --> D_NORM
+C_CC_CKJM --> D_NORM
+C_CC_LIZARD --> D_NORM
+C_CC_RADON --> D_NORM
+C_LOC_CLOC --> D_NORM
+C_LOC_TOKEI --> D_NORM
+C_HAL_JAVANCSS --> D_NORM
+C_HAL_RADON --> D_NORM
+C_CHURN_GIT --> D_NORM
+C_DUP_JSCPD --> D_NORM
+
+' --- Derived dependencies ---
+D_NORM --> M_INSTABILITY : needs Ca, Ce
+D_NORM --> M_ABSTRACTNESS : needs Na, Nc (if available)
+M_INSTABILITY --> M_DISTANCE
+M_ABSTRACTNESS --> M_DISTANCE
+
+note right of M_INSTABILITY
+Instability is typically derived from afferent/efferent coupling:
+- Ca (Afferent coupling)
+- Ce (Efferent coupling)
+
+If your pipeline stores Ca/Ce from JDepend in normalized output,
+you can compute Instability in analysis/build_dataset.py or a dedicated step.
+end note
+
+@enduml

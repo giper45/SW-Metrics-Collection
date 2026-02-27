@@ -1,0 +1,22 @@
+@startuml
+title From JDepend to Instability (data-derived)
+
+actor User
+participant "Makefile" as Make
+participant "Docker: ce-ca-jdepend" as JD
+database "results/*.jsonl" as R
+participant "analysis/normalize.py" as Norm
+database "results_normalized/*.jsonl" as RN
+participant "analysis/build_dataset.py" as DS
+database "analysis_out/dataset_*.csv" as OUT
+
+User -> Make : make collect-coupling
+Make -> JD : docker run (mount repo + results/)
+JD -> R : write Ca/Ce per package (jsonl)
+User -> Make : make normalize
+Make -> Norm : run normalize
+Norm -> RN : write normalized Ca/Ce
+User -> Make : make dataset
+Make -> DS : build_dataset
+DS -> OUT : compute Instability = Ce/(Ca+Ce)\n+ store in dataset
+@enduml

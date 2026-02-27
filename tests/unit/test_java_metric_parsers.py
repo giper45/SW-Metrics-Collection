@@ -86,8 +86,17 @@ def test_jdepend_parser_extracts_package_stats():
     assert parsed["com.example.util"]["i"] == 0.5
 
 
-def test_ck_derived_instability_formula():
-    module = load_module(REPO_ROOT / "metrics/instability/java/i-ck-derived/collect.py")
-    rows = [{"ce": "3", "ca": "1"}, {"ce": "0", "ca": "0"}]
-    # (3/4 + 0) / 2 = 0.375
-    assert module.compute_instability_from_rows(rows) == 0.375
+def test_jdepend_parser_supports_textui_291_format():
+    module = load_module(REPO_ROOT / "metrics/coupling/java/ce-ca-jdepend/collect.py")
+    raw = """
+    --------------------------------------------------
+    - Package: com.acme.core
+    --------------------------------------------------
+      Ca: 1
+      Ce: 2
+      A: 0 I: 0.67 D: 0.33
+    """
+    parsed = module.parse_jdepend_text(raw)
+    assert parsed["com.acme.core"]["ca"] == 1
+    assert parsed["com.acme.core"]["ce"] == 2
+    assert parsed["com.acme.core"]["i"] == 0.67

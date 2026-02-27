@@ -1,0 +1,31 @@
+@startuml
+title analysis/ package - Modules
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+package "analysis" {
+  [build_manifest.py] as manifest
+  [normalize.py] as normalize
+  [build_dataset.py] as dataset
+  [agreement.py] as agreement
+  [report_repository.py] as report
+  folder "contracts/" as contracts
+}
+
+database "results/" as results
+database "results_normalized/" as norm
+database "analysis_out/" as out
+
+manifest --> results : reads raw JSONL\nwrites manifest JSON
+normalize --> results : reads raw JSONL\n(optional manifest)
+normalize --> norm : writes normalized JSONL
+dataset --> norm : reads normalized JSONL
+dataset --> out : writes dataset_long/wide
+agreement --> out : reads dataset_long\nwrites agreement.csv
+report --> norm : reads normalized JSONL
+report --> out : reads dataset_long\nwrites repo_report*
+
+report --> agreement : uses compute_agreement_rows()
+
+contracts ..> normalize : schema knowledge
+@enduml

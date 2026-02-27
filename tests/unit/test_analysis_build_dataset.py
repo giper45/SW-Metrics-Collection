@@ -60,7 +60,7 @@ def test_build_dataset_outputs_long_and_wide(tmp_path: Path):
     assert "ca__jdepend__jdepend-default" in header
     assert "ce__jdepend__jdepend-default" in header
     assert "cc__lizard__lizard-default" in header
-    assert "cc__ckjm__ckjm-normalized" in header
+    assert "cc__ck__ck-normalized" in header
     assert "loc__cloc__cloc-default" in header
     assert "loc__tokei__tokei-default" in header
 
@@ -163,3 +163,22 @@ def test_build_dataset_deduplicates_same_measurement_key(tmp_path: Path):
     assert len(duplicate_rows) == 1
     assert duplicate_rows[0]["metric"] == "cc"
     assert duplicate_rows[0]["duplicate_count"] == "2"
+
+
+def test_build_dataset_ignores_runtime_telemetry_jsonl(tmp_path: Path):
+    module = load_module(MODULE_PATH, "analysis_build_dataset_ignore_runtime")
+    input_dir = tmp_path / "results_normalized"
+    output_dir = tmp_path / "analysis_out"
+    input_dir.mkdir(parents=True, exist_ok=True)
+
+    (input_dir / "metric.jsonl").write_text(
+        '{"schema_version":"1.0","run_id":"run-1","project":"repo-x","metric":"loc","variant":"cloc-default","component_type":"file","component":"src/A.java","status":"ok","value":10.0,"tool":"cloc","tool_version":"1.0","parameters":{},"timestamp_utc":"2026-02-26T10:00:00Z"}\n',
+        encoding="utf-8",
+    )
+    (input_dir / "metric-runtime-run-1.jsonl").write_text(
+        '{"run_id":"run-1","metric_container":"loc-cloc:latest","duration_seconds":1.2}\n',
+        encoding="utf-8",
+    )
+
+    summary = module.build_dataset(input_dir, output_dir)
+    assert summary["input_rows"] == 1

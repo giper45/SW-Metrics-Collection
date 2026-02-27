@@ -45,7 +45,6 @@ Checks performed:
   - Ce/Ca oracle values for `ce-ca-jdepend`
 - cross-tool consistency checks:
   - LOC agreement (`cloc`/`tokei`/`scc`) within tolerance
-  - `i-jdepend == ce/(ce+ca)` derived consistency
-  - `i-ck-derived` close to `i-jdepend` on coupling fixture
+  - instability formula consistency via normalization (`ce-ca` -> `*-derived`)
 - anti-regression assertions to avoid all-zero outputs (`any(value > 0)` on controlled fixtures)
 - validator container execution

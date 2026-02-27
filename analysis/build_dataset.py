@@ -123,9 +123,17 @@ def _validate_row(row: Dict, source: str) -> None:
             raise ValueError(f"{source}: value must be null when status=skipped")
 
 
+def _is_telemetry_jsonl(path: Path) -> bool:
+    return path.name.startswith("metric-runtime-")
+
+
 def read_jsonl_rows(input_dir: Path) -> List[Dict]:
     rows: List[Dict] = []
-    for jsonl_path in sorted(path for path in input_dir.rglob("*.jsonl") if path.is_file()):
+    for jsonl_path in sorted(
+        path
+        for path in input_dir.rglob("*.jsonl")
+        if path.is_file() and not _is_telemetry_jsonl(path)
+    ):
         with jsonl_path.open("r", encoding="utf-8") as handle:
             for line_no, raw in enumerate(handle, start=1):
                 text = raw.strip()

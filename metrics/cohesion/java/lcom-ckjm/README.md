@@ -1,6 +1,6 @@
 # lcom-ckjm
 
-Module-level cohesion using ckjm/ck (mean class LCOM).
+Module-level cohesion using [dspinellis/ckjm](https://github.com/dspinellis/ckjm) (mean class LCOM).
 
 ## Build
 
@@ -61,3 +61,11 @@ Each line in the output file is one JSON object:
 ## Collector notes
 
 - value is mean class LCOM at module level.
+- this collector uses CKJM bytecode analysis (`gr.spinellis.ckjm.MetricsFilter`), not CK source analysis.
+- CKJM is built from the official source repository `dspinellis/ckjm` inside the Docker image.
+- class files are read from module build folders:
+  - `target/classes`
+  - `build/classes/java/main`
+  - `build/classes/kotlin/main`
+  - `build/classes`
+  - `out/production`

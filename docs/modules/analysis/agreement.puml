@@ -1,0 +1,19 @@
+@startuml
+title analysis.agreement - Inter-tool agreement
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+component "agreement.py\npython -m analysis.agreement" as ag
+file "analysis_out/dataset_long.csv" as long
+file "analysis_out/agreement.csv" as out
+
+long --> ag : read long dataset
+ag --> out : write agreement pairs\n(Spearman rho + n_common)
+
+note right of ag
+Scope:
+- inter-tool + intra-metric only
+- default min_common=2
+end note
+
+@enduml

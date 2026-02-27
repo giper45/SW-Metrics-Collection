@@ -71,3 +71,34 @@ def test_git_numstat_parser_ignores_tests():
     module = load_module(REPO_ROOT / "metrics/evolution/generic/churn-git/collect.py")
     raw = "10\t2\tsrc/main/java/A.java\n3\t1\tsrc/test/java/ATest.java\n"
     assert module.parse_git_numstat(raw) == 12.0
+
+
+def test_churn_collect_skips_partial_clone_read_only(monkeypatch):
+    module = load_module(REPO_ROOT / "metrics/evolution/generic/churn-git/collect.py")
+
+    def fake_find_git_root(project_path, dry_run):
+        return "/app/junit5"
+
+    def fake_run_command(cmd, dry_run, cwd=None, allowed_returncodes=None):
+        raise RuntimeError(
+            "command failed (128): git -C /app/junit5 log --numstat --format=tformat:\n"
+            "stderr: fatal: Unable to create temporary file '/app/junit5/.git/objects/pack/tmp_pack_XXXXXX': Read-only file system\n"
+            "fatal: fetch-pack: invalid index-pack output\n"
+            "fatal: could not fetch abc from promisor remote\n"
+        )
+
+    monkeypatch.setattr(module, "find_git_root", fake_find_git_root)
+    monkeypatch.setattr(module, "run_command", fake_run_command)
+
+    rows = module.collect_project_rows(
+        project="junit5",
+        project_path="/app/junit5",
+        tool_version="2.44.0",
+        timestamp="2026-02-27T10:00:00Z",
+        dry_run=False,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["status"] == "skipped"
+    assert rows[0]["skip_reason"] == "partial_clone_read_only"
+    assert rows[0]["value"] is None

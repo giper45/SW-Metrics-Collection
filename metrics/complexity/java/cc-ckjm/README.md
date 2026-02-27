@@ -1,6 +1,6 @@
 # cc-ckjm
 
-Module-level raw Java complexity components from CKJM/CK (`WMC` and `NOM`).
+Module-level raw Java complexity components from CK (`WMC` and `NOM`).
 Normalization to comparable `cc` is performed downstream via `analysis/normalize.py`.
 
 ## Build
@@ -29,7 +29,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-wmc-ckjm-raw.jsonl`
+`/results/<project>-<timestamp>-wmc-ck-ck-raw.jsonl`
 
 Timestamp format is UTC ISO8601 with seconds (for example `2026-02-24T15:04:05Z`).
 
@@ -41,11 +41,11 @@ Each line in the output file is one JSON object:
 {
   "project": "string",
   "metric": "wmc|nom",
-  "variant": "ckjm-raw",
+  "variant": "ck-raw",
   "component_type": "module",
   "component": "string",
   "value": 0.0,
-  "tool": "ckjm",
+  "tool": "ck",
   "tool_version": "string",
   "parameters": {},
   "timestamp_utc": "2026-02-24T15:04:05Z"
@@ -70,7 +70,7 @@ Each line in the output file is one JSON object:
 
 ## Normalization step
 
-To derive comparable CC proxy rows (`metric=cc`, `variant=ckjm-normalized`), run:
+To derive comparable CC proxy rows (`metric=cc`, `variant=ck-normalized`), run:
 
 ```bash
 python3 analysis/normalize.py results results_normalized

@@ -1,0 +1,19 @@
+@startuml
+title analysis.report_repository - Per-project report
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+component "report_repository.py\npython -m analysis.report_repository" as rep
+database "results_normalized/" as norm
+file "analysis_out/dataset_long.csv" as long
+file "analysis_out/repo_report.csv" as csv
+file "analysis_out/repo_report.json" as json
+
+norm --> rep : read normalized rows\n(status/run_id/commit/dirty)
+long --> rep : metric-level counts\n+ values
+rep --> csv : write per-metric summary
+rep --> json : write structured report
+
+rep ..> "agreement.compute_agreement_rows()" : reuse agreement logic
+
+@enduml

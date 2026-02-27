@@ -25,8 +25,8 @@ if _COMMON_DIR and str(_COMMON_DIR) not in sys.path:
 from result_writer import filter_projects, generate_run_id, run_collector, write_jsonl_rows
 
 METRIC_NAME = "wmc"
-VARIANT_NAME = "ckjm-raw"
-TOOL_NAME = "ckjm"
+VARIANT_NAME = "ck-raw"
+TOOL_NAME = "ck"
 CK_JAR = "/opt/tools/ck.jar"
 
 VENDOR_DIRS = {"node_modules", "target", "build", ".venv", "venv", ".git"}
@@ -209,7 +209,7 @@ def parse_ckjm_wmc_values(raw_output):
 
 def compute_cc_proxy_from_ckjm(class_csv_path):
     """
-    Compute module-level CC proxy statistics from class-level CK/CKJM CSV.
+    Compute module-level CC proxy statistics from class-level CK CSV.
     Per class:
       cc_proxy_class = WMC / NOM
       NOM == 0 => class ignored
@@ -374,7 +374,7 @@ def output_path(results_dir, project, timestamp):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Collect raw module-level WMC and NOM with CKJM/CK")
+    parser = argparse.ArgumentParser(description="Collect raw module-level WMC and NOM with CK")
     parser.add_argument("--app-dir", default=os.environ.get("SRC_ROOT", os.environ.get("METRIC_APP_DIR", "/app")))
     parser.add_argument("--results-dir", default=os.environ.get("RESULTS_DIR", os.environ.get("METRIC_RESULTS_DIR", "/results")))
     parser.add_argument("--dry-run", action="store_true")
@@ -389,7 +389,7 @@ def main():
         return 0
 
     os.makedirs(args.results_dir, exist_ok=True)
-    version = os.environ.get("CKJM_VERSION", "unknown") if not args.dry_run else "dry-run"
+    version = os.environ.get("CK_VERSION", "unknown") if not args.dry_run else "dry-run"
 
     for project, project_path in projects:
         rows = []

@@ -151,31 +151,51 @@ def output_path(results_dir, project, timestamp):
     return os.path.join(results_dir, f"{project}-{timestamp}-{METRIC_NAME}-{TOOL_NAME}-{VARIANT_NAME}.jsonl")
 
 
+def common_parameters():
+    return {
+        "category": "evolution",
+        "granularity": "file",
+        "scope_filter": "no_tests",
+        "formula": "sum(added+deleted)",
+        "ignored_dirs": sorted(VENDOR_DIRS),
+    }
+
+
+def skipped_project_row(project, tool_version, timestamp, skip_reason):
+    return {
+        "project": project,
+        "metric": METRIC_NAME,
+        "variant": VARIANT_NAME,
+        "component_type": "project",
+        "component": project,
+        "status": "skipped",
+        "skip_reason": skip_reason,
+        "value": None,
+        "tool": TOOL_NAME,
+        "tool_version": tool_version,
+        "parameters": common_parameters(),
+        "timestamp_utc": timestamp,
+    }
+
+
+def classify_git_log_failure(error_text):
+    text = str(error_text or "").lower()
+    if (
+        "read-only file system" in text
+        and (
+            "promisor remote" in text
+            or "fetch-pack" in text
+            or "tmp_pack_" in text
+        )
+    ):
+        return "partial_clone_read_only"
+    return "git_log_failed"
+
+
 def collect_project_rows(project, project_path, tool_version, timestamp, dry_run):
     git_root = find_git_root(project_path, dry_run)
     if git_root is None:
-        return [
-            {
-                "project": project,
-                "metric": METRIC_NAME,
-                "variant": VARIANT_NAME,
-                "component_type": "project",
-                "component": project,
-                "status": "skipped",
-                "skip_reason": "not_a_git_repository",
-                "value": None,
-                "tool": TOOL_NAME,
-                "tool_version": tool_version,
-                "parameters": {
-                    "category": "evolution",
-                    "granularity": "file",
-                    "scope_filter": "no_tests",
-                    "formula": "sum(added+deleted)",
-                    "ignored_dirs": sorted(VENDOR_DIRS),
-                },
-                "timestamp_utc": timestamp,
-            }
-        ]
+        return [skipped_project_row(project, tool_version, timestamp, "not_a_git_repository")]
 
     rel_project = normalize_path(os.path.relpath(project_path, git_root))
     if rel_project == ".":
@@ -185,34 +205,17 @@ def collect_project_rows(project, project_path, tool_version, timestamp, dry_run
     if rel_project:
         cmd.extend(["--", rel_project])
 
-    stdout, _, _ = run_command(cmd, dry_run)
+    try:
+        stdout, _, _ = run_command(cmd, dry_run)
+    except RuntimeError as exc:
+        reason = classify_git_log_failure(str(exc))
+        return [skipped_project_row(project, tool_version, timestamp, reason)]
     if dry_run:
         return []
 
     file_values = parse_git_numstat_file_map(stdout, project_prefix=rel_project)
     if not file_values:
-        return [
-            {
-                "project": project,
-                "metric": METRIC_NAME,
-                "variant": VARIANT_NAME,
-                "component_type": "project",
-                "component": project,
-                "status": "skipped",
-                "skip_reason": "no_trackable_files",
-                "value": None,
-                "tool": TOOL_NAME,
-                "tool_version": tool_version,
-                "parameters": {
-                    "category": "evolution",
-                    "granularity": "file",
-                    "scope_filter": "no_tests",
-                    "formula": "sum(added+deleted)",
-                    "ignored_dirs": sorted(VENDOR_DIRS),
-                },
-                "timestamp_utc": timestamp,
-            }
-        ]
+        return [skipped_project_row(project, tool_version, timestamp, "no_trackable_files")]
 
     rows = []
     for rel, value in sorted(file_values.items()):
@@ -226,13 +229,7 @@ def collect_project_rows(project, project_path, tool_version, timestamp, dry_run
                 "value": value,
                 "tool": TOOL_NAME,
                 "tool_version": tool_version,
-                "parameters": {
-                    "category": "evolution",
-                    "granularity": "file",
-                    "scope_filter": "no_tests",
-                    "formula": "sum(added+deleted)",
-                    "ignored_dirs": sorted(VENDOR_DIRS),
-                },
+                "parameters": common_parameters(),
                 "timestamp_utc": timestamp,
             }
         )

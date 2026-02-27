@@ -123,6 +123,10 @@ def read_jsonl(path: Path) -> List[Dict]:
     return rows
 
 
+def _is_telemetry_jsonl(path: Path) -> bool:
+    return path.name.startswith("metric-runtime-")
+
+
 def write_jsonl(path: Path, rows: Iterable[Dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -232,18 +236,19 @@ def _derive_cc_from_wmc_nom(rows: List[Dict], source_file: str) -> List[Dict]:
             continue
         project, module, source_tool, source_variant, tool_version, timestamp_utc, schema_version, run_id = key
         mean_proxy = round(sum(proxies) / len(proxies), 6)
+        normalized_variant = "ck-normalized"
         derived_rows.append(
             {
                 "schema_version": schema_version,
                 "run_id": run_id,
                 "project": project,
                 "metric": "cc",
-                "variant": "ckjm-normalized",
+                "variant": normalized_variant,
                 "component_type": "module",
                 "component": module,
                 "status": "ok",
                 "value": mean_proxy,
-                "tool": "ckjm",
+                "tool": source_tool,
                 "tool_version": tool_version,
                 "parameters": {
                     "derived_from": "wmc/nom",
@@ -350,87 +355,130 @@ def _derive_lizard_module_cc(rows: List[Dict], source_file: str) -> List[Dict]:
     return derived_rows
 
 
-def _existing_direct_instability_keys(rows: List[Dict]) -> set:
-    keys = set()
-    for row in rows:
-        if str(row.get("status", "ok")).strip().lower() != "ok":
-            continue
-        if str(row.get("metric", "")).strip().lower().replace("-", "_") != "instability":
-            continue
-        project = row.get("project")
-        module = _infer_module(row)
-        tool = row.get("tool")
-        if isinstance(project, str) and project.strip() and module and isinstance(tool, str) and tool.strip():
-            keys.add((project.strip(), module, tool.strip()))
-    return keys
-
-
 def _derive_instability_from_ce_ca(rows: List[Dict], source_file: str) -> List[Dict]:
-    direct_instability_keys = _existing_direct_instability_keys(rows)
-    ce_ca: Dict[Tuple, Dict[str, float]] = defaultdict(dict)
+    ce_ca: Dict[Tuple, Dict[str, Dict[str, Optional[float]]]] = defaultdict(dict)
+
+    def _replace(existing: Optional[Dict], candidate: Dict) -> bool:
+        if existing is None:
+            return True
+        existing_ok = str(existing.get("status", "")).lower() == "ok" and existing.get("value") is not None
+        candidate_ok = str(candidate.get("status", "")).lower() == "ok" and candidate.get("value") is not None
+        if candidate_ok and not existing_ok:
+            return True
+        if candidate_ok and existing_ok:
+            return True
+        return False
+
     for row in rows:
-        if str(row.get("status", "ok")).strip().lower() != "ok":
-            continue
         dimension = _infer_dimension(row)
         if dimension not in {"ce", "ca"}:
             continue
 
-        value = _safe_float(row.get("value"))
-        if value is None:
+        metric_norm = str(row.get("metric", "")).strip().lower().replace("-", "_")
+        if metric_norm not in {"ce_ca", "ce", "ca"}:
             continue
 
-        project = row.get("project")
-        module = _infer_module(row)
-        if not isinstance(project, str) or not project.strip() or not module:
+        project = _non_empty_string(row.get("project"))
+        run_id = _non_empty_string(row.get("run_id"))
+        timestamp_utc = _non_empty_string(row.get("timestamp_utc"))
+        component_type = _non_empty_string(row.get("component_type"))
+        component = _non_empty_string(row.get("component"))
+        tool = _non_empty_string(row.get("tool"))
+        variant = _non_empty_string(row.get("variant"))
+        tool_version = _non_empty_string(row.get("tool_version"))
+        schema_version = _non_empty_string(row.get("schema_version"))
+        if not all([project, run_id, timestamp_utc, component_type, component, tool, variant, tool_version, schema_version]):
             continue
 
         key = (
-            project.strip(),
-            module,
-            str(row.get("tool", "unknown")),
-            str(row.get("variant", "unknown")),
-            str(row.get("tool_version", "unknown")),
-            str(row.get("timestamp_utc", utc_timestamp_now())),
-            str(row.get("schema_version", "1.0")),
-            str(row.get("run_id", "unknown")),
+            project,
+            run_id,
+            timestamp_utc,
+            component_type,
+            component,
+            tool,
+            variant,
         )
-        ce_ca[key][dimension] = value
+        status = str(row.get("status", "ok")).strip().lower()
+        value = _safe_float(row.get("value")) if status == "ok" else None
+        candidate = {
+            "status": status,
+            "value": value,
+            "tool_version": tool_version,
+            "schema_version": schema_version,
+        }
+        existing = ce_ca[key].get(dimension)
+        if _replace(existing, candidate):
+            ce_ca[key][dimension] = candidate
 
     derived_rows: List[Dict] = []
     for key in sorted(ce_ca.keys()):
         values = ce_ca[key]
-        if "ce" not in values or "ca" not in values:
+        project, run_id, timestamp_utc, component_type, component, source_tool, source_variant = key
+        ce_info = values.get("ce")
+        ca_info = values.get("ca")
+
+        base_tool_version = "unknown"
+        base_schema_version = "1.0"
+        for item in (ce_info, ca_info):
+            if isinstance(item, dict):
+                if isinstance(item.get("tool_version"), str) and item.get("tool_version"):
+                    base_tool_version = str(item["tool_version"])
+                if isinstance(item.get("schema_version"), str) and item.get("schema_version"):
+                    base_schema_version = str(item["schema_version"])
+
+        row = {
+            "schema_version": base_schema_version,
+            "run_id": run_id,
+            "project": project,
+            "metric": "instability",
+            "variant": f"{source_variant}-derived",
+            "component_type": component_type,
+            "component": component,
+            "tool": source_tool,
+            "tool_version": base_tool_version,
+            "parameters": {
+                "derived_from": "ce-ca",
+                "formula": "Ce/(Ce+Ca)",
+                "source_metrics": ["ce", "ca"],
+                "scope": "component",
+                "undefined_when": "Ce+Ca=0",
+            },
+            "timestamp_utc": timestamp_utc,
+            "source_tool": source_tool,
+            "source_variant": source_variant,
+            "source_file": source_file,
+        }
+
+        if not ce_info or not ca_info:
+            row["status"] = "skipped"
+            row["skip_reason"] = "missing_ce_or_ca"
+            row["value"] = None
+            derived_rows.append(row)
             continue
-        project, module, source_tool, source_variant, tool_version, timestamp_utc, schema_version, run_id = key
-        if (project, module, source_tool) in direct_instability_keys:
+
+        ce_status = str(ce_info.get("status", "")).lower()
+        ca_status = str(ca_info.get("status", "")).lower()
+        ce_value = _safe_float(ce_info.get("value"))
+        ca_value = _safe_float(ca_info.get("value"))
+        if ce_status != "ok" or ca_status != "ok" or ce_value is None or ca_value is None:
+            row["status"] = "skipped"
+            row["skip_reason"] = "missing_ce_or_ca"
+            row["value"] = None
+            derived_rows.append(row)
             continue
-        ce_value = float(values["ce"])
-        ca_value = float(values["ca"])
-        denom = ce_value + ca_value
-        instability = 0.0 if denom <= 0.0 else round(ce_value / denom, 6)
-        derived_rows.append(
-            {
-                "schema_version": schema_version,
-                "run_id": run_id,
-                "project": project,
-                "metric": "instability",
-                "variant": f"{source_variant}-normalized",
-                "component_type": "module",
-                "component": module,
-                "status": "ok",
-                "value": instability,
-                "tool": source_tool,
-                "tool_version": tool_version,
-                "parameters": {
-                    "derived_from": "ce/ca",
-                    "formula": "ce/(ce+ca)",
-                },
-                "timestamp_utc": timestamp_utc,
-                "source_tool": source_tool,
-                "source_variant": source_variant,
-                "source_file": source_file,
-            }
-        )
+
+        denom = float(ce_value) + float(ca_value)
+        if denom == 0.0:
+            row["status"] = "skipped"
+            row["skip_reason"] = "zero_denominator"
+            row["value"] = None
+            derived_rows.append(row)
+            continue
+
+        row["status"] = "ok"
+        row["value"] = round(float(ce_value) / denom, 6)
+        derived_rows.append(row)
     return derived_rows
 
 
@@ -454,7 +502,11 @@ def normalize_file(input_file: Path, output_file: Path, input_root: Path) -> int
 def normalize_results(input_dir: Path, output_dir: Path) -> Dict[str, int]:
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)
-    files = sorted(path for path in input_dir.rglob("*.jsonl") if path.is_file())
+    files = sorted(
+        path
+        for path in input_dir.rglob("*.jsonl")
+        if path.is_file() and not _is_telemetry_jsonl(path)
+    )
 
     summary = {"files": 0, "input_rows": 0, "derived_rows": 0, "output_rows": 0}
     for input_file in files:

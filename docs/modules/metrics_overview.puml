@@ -1,0 +1,110 @@
+@startuml
+title metrics/ - Container modules
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+' ---- Shared mounts ----
+folder "/app (src:ro)" as app
+database "/results (jsonl)" as results
+
+package "metrics" {
+
+  package "size" {
+    package "generic" {
+      [loc-cloc] as loc_cloc <<container>>
+      [loc-tokei] as loc_tokei <<container>>
+      [loc-scc] as loc_scc <<container>>
+    }
+  }
+
+  package "complexity" {
+    [cc-lizard] as cc_lizard <<container>>
+    [cc-ckjm] as cc_ckjm <<container>>
+    [cc-radon] as cc_radon <<container>>
+  }
+
+  package "coupling" {
+    package "java" {
+      [ce-ca-jdepend] as ce_ca_jdepend <<container>>
+      [ce-ca-ck-cbo] as ce_ca_ck <<container>>
+    }
+  }
+
+  note "instability rows are derived in analysis/normalize.py\nfrom ce-ca per component (no direct collector)" as instability_note
+
+  package "cohesion" {
+    package "java" {
+      [lcom-ck] as lcom_ck <<container>>
+      [lcom-ckjm] as lcom_ckjm <<container>>
+    }
+  }
+
+  package "paper extras" {
+    [duplication-jscpd] as dup <<container>>
+    [mi-halstead-java] as mi <<container>>
+    [static-warnings-checkstyle] as warn <<container>>
+    [coverage-jacoco] as cov <<container>>
+    [churn-git] as churn <<container>>
+  }
+
+  package "generic" {
+    [normalized-collector] as norm_col <<container>>
+  }
+
+  package "validate-results" {
+    [jsonl-schema-validator] as validator <<container>>
+  }
+
+  package "common" {
+    [repo_common] as repo_common <<shared>>
+  }
+}
+
+' ---- Common dependency (shared base) ----
+repo_common ..> loc_cloc
+repo_common ..> cc_lizard
+repo_common ..> ce_ca_jdepend
+repo_common ..> validator
+
+' ---- IO contracts (all containers read /app and write /results) ----
+loc_cloc --> app
+loc_cloc --> results
+loc_tokei --> app
+loc_tokei --> results
+loc_scc --> app
+loc_scc --> results
+
+cc_lizard --> app
+cc_lizard --> results
+cc_ckjm --> app
+cc_ckjm --> results
+cc_radon --> app
+cc_radon --> results
+
+ce_ca_jdepend --> app
+ce_ca_jdepend --> results
+ce_ca_ck --> app
+ce_ca_ck --> results
+
+lcom_ck --> app
+lcom_ck --> results
+lcom_ckjm --> app
+lcom_ckjm --> results
+
+dup --> app
+dup --> results
+mi --> app
+mi --> results
+warn --> app
+warn --> results
+cov --> app
+cov --> results
+churn --> app
+churn --> results
+
+norm_col --> app
+norm_col --> results
+
+validator --> results
+
+@enduml

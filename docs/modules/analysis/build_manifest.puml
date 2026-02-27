@@ -1,0 +1,23 @@
+@startuml
+title analysis.build_manifest - Responsibilities
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+component "build_manifest.py\npython -m analysis.build_manifest" as manifest
+database "results/\nraw JSONL" as results
+file "manifest-<run_id>.json" as mf
+
+manifest --> results : list JSONL files\n+ parse metadata
+manifest --> mf : write expected coverage\n+ primary component type\n+ language profile
+
+note right of manifest
+Makefile target: manifest
+Inputs:
+- --results-dir results/
+- --run-id <uuid>
+- --expected <metric:tool:variant,...>
+
+Output:
+- results/manifest-<run_id>.json
+end note
+@enduml

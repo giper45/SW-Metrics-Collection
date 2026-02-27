@@ -1,0 +1,60 @@
+@startuml
+title SW Metrics Collection - System Context (2026-02-27)
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+actor "Ricercatore/Dev" as user
+component "Makefile (orchestrazione)" as make
+node "Docker Engine" as docker
+folder "src/ (repo target)\n(mounted /app:ro)" as src
+database "results/\nJSONL raw" as results
+database "results_normalized/\nJSONL normalizzati" as norm
+database "analysis_out/\nCSV/JSON dataset + agreement" as out
+
+package "Metric Containers (Docker)" as containers {
+  [LOC (cloc/tokei/scc)] as loc
+  [CC (lizard/ckjm/radon)] as cc
+  [Coupling (jdepend/CK-proxy)] as coupling
+  [Instability (jdepend/CK-derived)] as instab
+  [Cohesion (lcom ck/ckjm)] as coh
+  [Extras (dup/MI/warnings/coverage/churn)] as extras
+  [Validator (jsonl-schema-validator)] as validator
+}
+
+package "Analysis (Python)" as analysis {
+  [build_manifest.py] as manifest
+  [normalize.py] as normalize
+  [build_dataset.py] as dataset
+  [agreement.py] as agreement
+  [report_repository.py] as report
+}
+
+user --> make : make experiment\n(collect-all + manifest + normalize + dataset + agreement + report)
+make --> docker : docker build/run
+docker --> containers
+containers --> src : read-only scan
+containers --> results : write JSONL
+
+make --> manifest
+manifest --> results : read JSONL + metadata
+manifest --> results : write manifest-<run_id>.json
+
+make --> normalize
+normalize --> results
+normalize --> norm
+
+make --> dataset
+dataset --> norm
+dataset --> out : dataset_long.csv\n+ dataset_wide_*.csv
+
+make --> agreement
+agreement --> out : read dataset_long.csv\nwrite agreement.csv
+
+make --> report
+report --> norm
+report --> out : repo_report.csv\nrepo_report.json
+
+make --> validator
+validator --> results : validate schema
+
+@enduml

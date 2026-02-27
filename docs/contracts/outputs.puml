@@ -1,0 +1,242 @@
+@startuml
+title Pipeline output contracts (JSON Schema) - Class view
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+
+' =========================
+' Root contract (pipeline)
+' =========================
+class PipelineOutputContracts <<schema>> {
+  +collection: CollectionPhaseOutput
+  +manifest: ManifestPhaseOutput
+  +normalization: NormalizationPhaseOutput
+  +dataset: DatasetPhaseOutput
+  +agreement: AgreementPhaseOutput
+  +report: ReportPhaseOutput
+  +validation: ValidationPhaseOutput
+}
+
+' =========================
+' Shared / enums
+' =========================
+enum Status {
+  ok
+  skipped
+}
+
+enum ComponentType {
+  module
+  package
+  file
+  class
+  method
+  project
+  clone_block
+}
+
+class UtcTimestamp <<value>> {
+  +iso8601: string
+}
+
+' =========================
+' Core JSONL row contract
+' =========================
+class MetricEvent <<jsonl_row>> {
+  +schema_version: string
+  +run_id: string
+  +project: string
+  +timestamp_utc: UtcTimestamp
+  +metric: string
+  +tool: string
+  +tool_version: string
+  +variant: string
+  +component_type: ComponentType
+  +component: string
+  +status: Status
+  +value: number|null
+  +parameters: object
+
+  +skip_reason: string?        ' optional
+  +submetric: string?          ' optional
+  +source_tool: string?        ' optional
+  +source_variant: string?     ' optional
+  +source_file: string?        ' optional
+}
+
+' =========================
+' Phase outputs
+' =========================
+class CollectionPhaseOutput <<phase_output>> {
+  +artifact_type: "jsonl"
+  +path_pattern: "/results/<project>-<timestamp_utc>-<metric>-<tool>-<variant>.jsonl"
+  +rows: MetricEvent[*]
+}
+
+class NormalizationPhaseOutput <<phase_output>> {
+  +artifact_type: "jsonl"
+  +path_pattern: "/results_normalized/<project>-<timestamp_utc>-<metric>-<tool>-<variant>.jsonl"
+  +rows: MetricEvent[*]
+}
+
+class ManifestPhaseOutput <<phase_output>> {
+  +artifact_type: "json"
+  +path: string
+  +manifest: ManifestDocument
+}
+
+class DatasetPhaseOutput <<phase_output>> {
+  +long_csv_rows: DatasetLongRow[*]
+  +wide_csv_selected_component_type: ComponentType
+  +wide_csv_selected_rows: DatasetWideRow[*]
+  +wide_csv_by_component_type: Map<ComponentType, DatasetWideRow[*]>
+}
+
+class AgreementPhaseOutput <<phase_output>> {
+  +agreement_rows: AgreementRow[*]
+}
+
+class ReportPhaseOutput <<phase_output>> {
+  +repo_report_rows: RepoReportRow[*]
+  +repo_report_json: RepoReportJson
+}
+
+class ValidationPhaseOutput <<phase_output>> {
+  +files: int
+  +rows: int
+  +invalid_rows: int
+  +exit_code: 0|1
+}
+
+' =========================
+' Manifest
+' =========================
+class ManifestDocument <<document>> {
+  +schema_version: string
+  +language: string
+  +run_id: string
+  +projects: string[*]
+  +timestamp_utc_start: UtcTimestamp
+  +timestamp_utc_end: UtcTimestamp
+  +component_type_primary: ComponentType
+
+  +variants_expected: string[*]
+  +variants_observed: string[*]
+  +missing_variants: string[*]
+
+  +outputs: object
+  +git_commit: string
+  +git_url: string
+  +status: string
+  +rows_total: int
+  +parse_errors: int
+  +run_ids_seen: string[*]
+}
+
+' =========================
+' Dataset rows
+' =========================
+class DatasetLongRow <<csv_row>> {
+  +project: string
+  +run_id: string
+  +timestamp_utc: UtcTimestamp
+  +component: string
+  +component_type: ComponentType
+  +metric: string
+  +status: Status
+  +tool: string
+  +variant: string
+  +value: number|null
+  +tool_version: string
+}
+
+class DatasetWideRow <<csv_row>> {
+  +project: string
+  +run_id: string
+  +timestamp_utc: UtcTimestamp
+  +component: string
+  +component_type: ComponentType
+
+  .. dynamic columns ..
+  +measurements: Map<String, number|null>
+  ' where key matches:
+  '   <metric>__<tool>__<variant>
+}
+
+' =========================
+' Agreement
+' =========================
+class AgreementRow <<csv_row>> {
+  +run_id: string
+  +metric: string
+  +component_type: ComponentType
+  +tool_a: string
+  +variant_a: string
+  +tool_b: string
+  +variant_b: string
+  +n_common: int
+  +spearman_rho: number|null
+  +notes: string
+}
+
+' =========================
+' Report
+' =========================
+class RepoReportJson <<document>> {
+  +projects: string[*]
+  +metrics: string[*]
+  +rows: RepoReportRow[*]
+}
+
+class RepoReportRow <<csv_row>> {
+  +project: string
+  +metric: string
+  +run_ids: string[*]
+  +repo_commit: string
+  +repo_dirty: boolean
+  +raw_rows_ok: int
+  +raw_rows_skipped: int
+  +n_rows_metric: int
+  +n_components: int
+  +component_types: string[*]
+  +n_tools: int
+  +tools: string[*]
+  +variants: string[*]
+  +agreement_pairs: int
+  +agreement_mean_rho: number|null
+  +agreement_min_common: int
+  +agreement_max_common: int
+}
+
+' =========================
+' Relationships (composition)
+' =========================
+PipelineOutputContracts *-- CollectionPhaseOutput
+PipelineOutputContracts *-- ManifestPhaseOutput
+PipelineOutputContracts *-- NormalizationPhaseOutput
+PipelineOutputContracts *-- DatasetPhaseOutput
+PipelineOutputContracts *-- AgreementPhaseOutput
+PipelineOutputContracts *-- ReportPhaseOutput
+PipelineOutputContracts *-- ValidationPhaseOutput
+
+CollectionPhaseOutput *-- "rows" MetricEvent
+NormalizationPhaseOutput *-- "rows" MetricEvent
+ManifestPhaseOutput *-- ManifestDocument
+
+DatasetPhaseOutput *-- DatasetLongRow
+DatasetPhaseOutput *-- DatasetWideRow
+
+AgreementPhaseOutput *-- AgreementRow
+
+ReportPhaseOutput *-- RepoReportRow
+ReportPhaseOutput *-- RepoReportJson
+RepoReportJson *-- RepoReportRow
+
+MetricEvent --> Status
+MetricEvent --> ComponentType
+DatasetLongRow --> Status
+DatasetLongRow --> ComponentType
+DatasetWideRow --> ComponentType
+AgreementRow --> ComponentType
+ManifestDocument --> ComponentType
+
+@enduml

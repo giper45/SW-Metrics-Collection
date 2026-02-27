@@ -1,0 +1,17 @@
+@startuml
+title i-jdepend (deprecated)
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+node "i-jdepend collector" as container
+component "status: deprecated / disabled" as status
+component "canonical path:\nanalysis/normalize.py derives instability\nfrom ce-ca per component" as normalize
+
+container --> status
+status --> normalize
+
+note right of normalize
+No instability JSONL is emitted by this collector.
+end note
+
+@enduml

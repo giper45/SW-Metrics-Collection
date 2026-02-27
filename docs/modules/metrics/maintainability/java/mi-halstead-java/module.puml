@@ -1,0 +1,20 @@
+@startuml
+title mi-halstead-java (metrics/maintainability/java/mi-halstead-java)
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+node "Docker container\nmi-halstead-java" as container
+folder "/app\n(src mounted RO)" as app
+database "/results\n(JSONL)" as results
+component "Toolchain\n(as per Dockerfile)" as tool
+
+app --> container : scan files
+container --> tool : run metric tool
+tool --> results : emit JSONL rows\n(project, metric, tool, variant,...)
+
+note right of results
+Output filename pattern:
+<project>-<timestamp>-<metric>-<tool>-<variant>.jsonl
+end note
+
+@enduml

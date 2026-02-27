@@ -1,0 +1,22 @@
+@startuml
+title analysis.normalize - Semantic normalization
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+component "normalize.py\npython -m analysis.normalize" as norm
+database "results/\nraw JSONL" as results
+database "results_normalized/\nnormalized JSONL" as out
+file "manifest-<run_id>.json (optional)" as mf
+
+results --> norm : raw rows per tool
+mf ..> norm : expected tools/metrics\n+ profile hints
+norm --> out : normalized rows:
+note right of out
+Normalization goals:
+- unify field names (metric/tool/variant/component)
+- canonical component types
+- clean numeric values/status
+- attach run_id + parameters
+end note
+
+@enduml

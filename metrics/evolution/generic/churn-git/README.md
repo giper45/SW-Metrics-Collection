@@ -34,3 +34,5 @@ docker run --rm \
 
 - `value` is historical churn: `sum(added + deleted)`.
 - Test paths are excluded from churn aggregation.
+- If git history cannot be read (for example partial clone lazy-fetch on read-only mount),
+  the collector writes a `status=skipped` project row instead of failing the whole run.
