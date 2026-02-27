@@ -180,7 +180,7 @@ paper-tables:
 	python3 -m analysis.paper_tables \
 		--agreement $(ANALYSIS_OUT_DIR)/agreement.csv \
 		--out-dir $(ANALYSIS_OUT_DIR) \
-		--tex-dir $(PWD)/paper/tables \
+		--tex-dir $(ANALYSIS_OUT_DIR) \
 		--min-common 2
 
 validate-results:
