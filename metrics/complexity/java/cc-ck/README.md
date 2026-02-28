@@ -1,4 +1,4 @@
-# cc-ckjm
+# cc-ck
 
 Module-level raw Java complexity components from CK (`WMC` and `NOM`).
 Normalization to comparable `cc` is performed downstream via `analysis/normalize.py`.
@@ -6,7 +6,7 @@ Normalization to comparable `cc` is performed downstream via `analysis/normalize
 ## Build
 
 ```bash
-docker build -t cc-ckjm:latest metrics/complexity/java/cc-ckjm
+docker build -t cc-ck:latest metrics/complexity/java/cc-ck
 ```
 
 ## Run
@@ -15,7 +15,7 @@ docker build -t cc-ckjm:latest metrics/complexity/java/cc-ckjm
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  cc-ckjm:latest
+  cc-ck:latest
 ```
 
 ## Dry run
@@ -24,7 +24,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  cc-ckjm:latest --dry-run
+  cc-ck:latest --dry-run
 ```
 
 ## Output file pattern

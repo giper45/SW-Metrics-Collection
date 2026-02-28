@@ -21,7 +21,7 @@ DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_commo
 	collect-normalized-loc-cloc \
 	collect-cc-lizard \
 	collect-cc-radon \
-	collect-cc-ckjm \
+	collect-cc-ck \
 	collect-ce-ca-jdepend \
 	collect-ce-ca-ck-cbo \
 	collect-lcom-ck \
@@ -85,9 +85,9 @@ collect-cc-radon:
 	$(DOCKER_BUILD_METRIC) -t cc-radon:latest metrics/complexity/python/cc-radon
 	$(DOCKER_RUN_METRIC) cc-radon:latest
 
-collect-cc-ckjm:
-	$(DOCKER_BUILD_METRIC) -t cc-ckjm:latest metrics/complexity/java/cc-ckjm
-	$(DOCKER_RUN_METRIC) cc-ckjm:latest
+collect-cc-ck:
+	$(DOCKER_BUILD_METRIC) -t cc-ck:latest metrics/complexity/java/cc-ck
+	$(DOCKER_RUN_METRIC) cc-ck:latest
 
 collect-ce-ca-jdepend:
 	$(DOCKER_BUILD_METRIC) -t ce-ca-jdepend:latest metrics/coupling/java/ce-ca-jdepend
@@ -126,7 +126,7 @@ collect-churn-git:
 	$(DOCKER_RUN_METRIC) churn-git:latest
 
 collect-size-all: collect-loc-cloc collect-loc-tokei collect-loc-scc
-collect-complexity-all: collect-cc-lizard collect-cc-ckjm
+collect-complexity-all: collect-cc-lizard collect-cc-ck
 collect-coupling-all: collect-ce-ca-jdepend collect-ce-ca-ck-cbo
 collect-cohesion-all: collect-lcom-ck collect-lcom-ckjm
 collect-paper-extras: collect-duplication-jscpd collect-mi-halstead-java collect-static-warnings-checkstyle collect-coverage-jacoco collect-churn-git

@@ -64,6 +64,11 @@ def discover_projects(app_dir):
 
 
 def discover_modules(project_name, project_path):
+    """Find all relevant folders by excluding those to be ignored
+
+    Returns:
+        list: List of modules and related paths
+    """
     try:
         entries = sorted(os.listdir(project_path))
     except OSError:
@@ -191,7 +196,7 @@ def _percentile(values, p):
     return sorted_values[lo] * (1.0 - frac) + sorted_values[hi] * frac
 
 
-def parse_ckjm_wmc_values(raw_output):
+def parse_ck_wmc_values(raw_output):
     values = []
     for line in raw_output.splitlines():
         line = line.strip()
@@ -207,7 +212,7 @@ def parse_ckjm_wmc_values(raw_output):
     return values
 
 
-def compute_cc_proxy_from_ckjm(class_csv_path):
+def compute_cc_proxy_from_ck_csv(class_csv_path):
     """
     Compute module-level CC proxy statistics from class-level CK CSV.
     Per class:
@@ -260,7 +265,16 @@ def compute_cc_proxy_from_ckjm(class_csv_path):
     }
 
 
-def compute_wmc_nom_totals_from_ckjm(class_csv_path):
+# Backward-compatibility aliases (legacy ckjm naming).
+def parse_ckjm_wmc_values(raw_output):
+    return parse_ck_wmc_values(raw_output)
+
+
+def compute_cc_proxy_from_ckjm(class_csv_path):
+    return compute_cc_proxy_from_ck_csv(class_csv_path)
+
+
+def compute_wmc_nom_totals_from_ck(class_csv_path):
     if not os.path.isfile(class_csv_path):
         return {"wmc": 0.0, "nom": 0.0, "valid_classes": 0, "skipped_nom_zero": 0}
 
@@ -326,7 +340,7 @@ def collect_module_raw_stats(module_path, dry_run):
         if dry_run:
             return {"wmc": 0.0, "nom": 0.0, "valid_classes": 0, "skipped_nom_zero": 0}
         class_csv = resolve_ck_csv_path(out_dir, "class.csv")
-        return compute_wmc_nom_totals_from_ckjm(class_csv)
+        return compute_wmc_nom_totals_from_ck(class_csv)
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)
 

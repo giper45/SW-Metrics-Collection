@@ -12,7 +12,7 @@ package "Metric Containers (Docker)" {
   [lcom-ckjm\n(metrics/cohesion/java/lcom-ckjm)] as C_LCOM_CKJM
   [lcom-ck\n(metrics/cohesion/java/lcom-ck)] as C_LCOM_CK
 
-  [cc-ckjm\n(metrics/complexity/java/cc-ckjm)] as C_CC_CKJM
+  [cc-ck\n(metrics/complexity/java/cc-ck)] as C_CC_CK
   [cc-lizard\n(metrics/complexity/generic/cc-lizard)] as C_CC_LIZARD
   [cc-radon\n(metrics/complexity/python/cc-radon)] as C_CC_RADON
 
@@ -42,7 +42,7 @@ C_JDEPEND --> D_NORM : produces Ca, Ce (+ packages)
 C_CK_CBO --> D_NORM : produces coupling variants
 C_LCOM_CKJM --> D_NORM
 C_LCOM_CK --> D_NORM
-C_CC_CKJM --> D_NORM
+C_CC_CK --> D_NORM
 C_CC_LIZARD --> D_NORM
 C_CC_RADON --> D_NORM
 C_LOC_CLOC --> D_NORM

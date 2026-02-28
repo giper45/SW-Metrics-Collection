@@ -1,9 +1,9 @@
 @startuml
-title cc-ckjm (metrics/complexity/java/cc-ckjm)
+title cc-ck (metrics/complexity/java/cc-ck)
 skinparam componentStyle rectangle
 skinparam shadowing false
 
-node "Docker container\ncc-ckjm" as container
+node "Docker container\ncc-ck" as container
 folder "/app\n(src mounted RO)" as app
 database "/results\n(JSONL)" as results
 component "Toolchain\n(as per Dockerfile)" as tool

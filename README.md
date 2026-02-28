@@ -7,7 +7,7 @@ Container-based scaffold for software metric experiments, focused on Java projec
 | Category | Metric | Tool / Variant |
 |---|---|---|
 | Size | LOC | `loc-cloc`, `loc-tokei`, `loc-scc` |
-| Complexity | CC | `cc-lizard`, `cc-ckjm` (collector uses CK `wmc/nom`, normalized downstream) |
+| Complexity | CC | `cc-lizard`, `cc-ck` (collector uses CK `wmc/nom`, normalized downstream) |
 | Coupling | Ce/Ca | `ce-ca-jdepend`, `ce-ca-ck-cbo` (CK proxy) |
 | Instability | I | derived in normalization from `ce-ca` (`*-derived`) |
 | Cohesion | LCOM | `lcom-ck`, `lcom-ckjm` |
@@ -52,7 +52,7 @@ python3 -m pip install pytest
 
 ```bash
 make collect-cc-lizard
-make collect-cc-ckjm
+make collect-cc-ck
 make collect-ce-ca-jdepend
 make collect-ce-ca-ck-cbo
 make collect-lcom-ck

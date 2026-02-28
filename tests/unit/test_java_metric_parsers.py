@@ -11,14 +11,14 @@ def load_module(path):
     return module
 
 
-def test_ckjm_parser_reads_wmc_column():
-    module = load_module(REPO_ROOT / "metrics/complexity/java/cc-ckjm/collect.py")
+def test_ck_parser_reads_wmc_column():
+    module = load_module(REPO_ROOT / "metrics/complexity/java/cc-ck/collect.py")
     raw = "com.example.A 4 1 0 2 3 1 1 1 2 0\ncom.example.B 6 1 0 1 2 1 0 1 1 0"
-    assert module.parse_ckjm_wmc_values(raw) == [4.0, 6.0]
+    assert module.parse_ck_wmc_values(raw) == [4.0, 6.0]
 
 
-def test_ckjm_cc_proxy_from_csv(tmp_path):
-    module = load_module(REPO_ROOT / "metrics/complexity/java/cc-ckjm/collect.py")
+def test_ck_cc_proxy_from_csv(tmp_path):
+    module = load_module(REPO_ROOT / "metrics/complexity/java/cc-ck/collect.py")
     csv_path = tmp_path / "class.csv"
     csv_path.write_text(
         "\n".join(
@@ -35,7 +35,7 @@ def test_ckjm_cc_proxy_from_csv(tmp_path):
         + "\n",
         encoding="utf-8",
     )
-    stats = module.compute_cc_proxy_from_ckjm(str(csv_path))
+    stats = module.compute_cc_proxy_from_ck_csv(str(csv_path))
     # valid classes: A(5.0), B(3.0), D(2.0)
     assert stats["valid_classes"] == 3
     assert stats["cc_proxy_mean"] == 3.333333
@@ -43,8 +43,8 @@ def test_ckjm_cc_proxy_from_csv(tmp_path):
     assert stats["cc_proxy_p95"] == 4.8
 
 
-def test_ckjm_wmc_nom_totals_from_csv(tmp_path):
-    module = load_module(REPO_ROOT / "metrics/complexity/java/cc-ckjm/collect.py")
+def test_ck_wmc_nom_totals_from_csv(tmp_path):
+    module = load_module(REPO_ROOT / "metrics/complexity/java/cc-ck/collect.py")
     csv_path = tmp_path / "class.csv"
     csv_path.write_text(
         "\n".join(
@@ -60,7 +60,7 @@ def test_ckjm_wmc_nom_totals_from_csv(tmp_path):
         + "\n",
         encoding="utf-8",
     )
-    stats = module.compute_wmc_nom_totals_from_ckjm(str(csv_path))
+    stats = module.compute_wmc_nom_totals_from_ck(str(csv_path))
     # valid non-test classes with NOM>0: A, B, D
     assert stats["wmc"] == 27.0
     assert stats["nom"] == 9.0

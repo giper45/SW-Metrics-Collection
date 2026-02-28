@@ -105,6 +105,11 @@ def filter_projects(projects, app_dir=None):
 
 
 def generate_run_id():
+    """Generate a new run id
+
+    Returns:
+        str: Takne from env otherwise uuid4
+    """
     forced = (os.environ.get("METRIC_RUN_ID") or os.environ.get("RUN_ID") or "").strip()
     if forced:
         return forced
@@ -126,6 +131,15 @@ def _safe_run(cmd):
 
 
 def _project_git_metadata(project_name, app_dir="/app"):
+    """Return repo commit and dirty
+
+    Args:
+        project_name (str): the project name
+        app_dir (str, optional): the folder . Defaults to "/app".
+
+    Returns:
+        dict: An object containing repo_commit and repo_dirty
+    """
     if not isinstance(project_name, str) or not project_name.strip():
         return {"repo_commit": "unknown", "repo_dirty": False}
 
@@ -213,6 +227,8 @@ def _ordered_row(row, canonical_order=None):
 
 
 def enrich_row(row, run_id, schema_version=SCHEMA_VERSION):
+    """ Add to the execution the schema version, run id and status
+    """
     enriched = dict(row)
     enriched["schema_version"] = schema_version
     enriched["run_id"] = run_id
@@ -230,6 +246,9 @@ def write_jsonl_rows(
     required_fields=None,
     canonical_order=None,
 ):
+    """ 
+    This function is called by each module to write results after the Dockerfile execution
+    """
     metadata_cache = {}
     prepared = [
         _inject_repo_metadata(

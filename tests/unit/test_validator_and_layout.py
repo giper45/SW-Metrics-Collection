@@ -10,7 +10,7 @@ REQUIRED_CONTAINERS = [
     "metrics/size/generic/loc-scc",
     "metrics/complexity/generic/cc-lizard",
     "metrics/complexity/python/cc-radon",
-    "metrics/complexity/java/cc-ckjm",
+    "metrics/complexity/java/cc-ck",
     "metrics/coupling/java/ce-ca-jdepend",
     "metrics/coupling/java/ce-ca-ck-cbo",
     "metrics/cohesion/java/lcom-ck",

@@ -19,7 +19,7 @@ package "metrics" {
 
   package "complexity" {
     [cc-lizard] as cc_lizard <<container>>
-    [cc-ckjm] as cc_ckjm <<container>>
+    [cc-ck] as cc_ck <<container>>
     [cc-radon] as cc_radon <<container>>
   }
 
@@ -76,8 +76,8 @@ loc_scc --> results
 
 cc_lizard --> app
 cc_lizard --> results
-cc_ckjm --> app
-cc_ckjm --> results
+cc_ck --> app
+cc_ck --> results
 cc_radon --> app
 cc_radon --> results
 

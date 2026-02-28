@@ -100,8 +100,8 @@ CONTAINERS = [
     },
     {
         "name": "cc-ck-wmc",
-        "context": REPO_ROOT / "metrics/complexity/java/cc-ckjm",
-        "image": "cc-ckjm:test",
+        "context": REPO_ROOT / "metrics/complexity/java/cc-ck",
+        "image": "cc-ck:test",
         "fixture": JAVA_FIXTURE,
         "metric": "wmc",
         "variant": "ck-raw",
