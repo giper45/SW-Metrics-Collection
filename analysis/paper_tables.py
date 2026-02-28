@@ -223,17 +223,16 @@ def _write_tex_summary(path: Path, rows: List[Dict]) -> None:
         "\\centering",
         "\\caption{Cross-tool agreement summary used in the paper.}",
         "\\label{tab:agreement-summary-auto}",
-        "\\begin{tabular}{lrrrrrrr}",
+        "\\begin{tabular}{lrrrrr}",
         "\\toprule",
-        "Metric & Pairs & Mean $\\rho$ & Median $\\rho$ & Min $\\rho$ & Max $\\rho$ & $n_{min}$ & $n_{max}$ \\\\",
+        "Metric & Pairs & Mean $\\rho$ & Median $\\rho$ & Min $\\rho$ & Max $\\rho$ \\\\",
         "\\midrule",
     ]
     for row in rows:
         lines.append(
             f"{_tex_escape(row['metric'])} & {int(row['pairs'])} & "
             f"{_fmt_float(row['rho_mean'])} & {_fmt_float(row['rho_median'])} & "
-            f"{_fmt_float(row['rho_min'])} & {_fmt_float(row['rho_max'])} & "
-            f"{int(row['n_common_min'])} & {int(row['n_common_max'])} \\\\"
+            f"{_fmt_float(row['rho_min'])} & {_fmt_float(row['rho_max'])} \\\\"
         )
     lines.extend(["\\bottomrule", "\\end{tabular}", "\\end{table}", ""])
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -246,17 +245,16 @@ def _write_tex_pairs(path: Path, rows: List[Dict]) -> None:
         "\\centering",
         "\\caption{Inter-tool agreement pairs selected for paper reporting.}",
         "\\label{tab:agreement-pairs-auto}",
-        "\\begin{tabular}{llrrr}",
+        "\\begin{tabular}{llrr}",
         "\\toprule",
-        "Metric & Tool pair & $\\rho$ & $n$ & Component \\\\",
+        "Metric & Tool pair & $\\rho$ & Component \\\\",
         "\\midrule",
     ]
     for row in rows:
         tool_pair = f"{row['tool_a']} vs {row['tool_b']}"
         lines.append(
             f"{_tex_escape(row['metric'])} & {_tex_escape(tool_pair)} & "
-            f"{_fmt_float(float(row['spearman_rho']))} & {int(row['n_common'])} & "
-            f"{_tex_escape(str(row['component_type']))} \\\\"
+            f"{_fmt_float(float(row['spearman_rho']))} & {_tex_escape(str(row['component_type']))} \\\\"
         )
     lines.extend(["\\bottomrule", "\\end{tabular}", "\\end{table}", ""])
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -318,4 +316,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
