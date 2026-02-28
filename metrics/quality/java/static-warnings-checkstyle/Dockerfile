@@ -15,6 +15,7 @@ ENV CHECKSTYLE_VERSION=${CHECKSTYLE_VERSION}
 WORKDIR /opt/metric
 COPY collect.py run.sh checkstyle.xml ./
 COPY --from=repo_common result_writer.py /opt/metric/common/result_writer.py
+COPY --from=repo_common result_executor.py /opt/metric/common/result_executor.py
 RUN chmod +x /opt/metric/run.sh
 
 ENTRYPOINT ["/opt/metric/run.sh"]

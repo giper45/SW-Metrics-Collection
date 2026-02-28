@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
+"""Shared collector utilities for result writing and project/run metadata.
+
+Historical note:
+- This module started as a pure JSONL writer helper.
+"""
+
 import json
 import math
 import os
 import subprocess
-import sys
 import uuid
 from collections import OrderedDict
 
 SCHEMA_VERSION = "1.0"
 DEFAULT_STATUS = "ok"
 ALLOWED_STATUSES = {"ok", "skipped"}
-EXIT_INPUT_ERROR = 2
-EXIT_TOOL_ERROR = 3
-EXIT_OUTPUT_ERROR = 4
 
 REQUIRED_FIELDS = {
     "project",
@@ -49,18 +51,6 @@ CANONICAL_ORDER = [
     "parameters",
     "timestamp_utc",
 ]
-
-
-class InputContractError(Exception):
-    pass
-
-
-class ToolExecutionError(Exception):
-    pass
-
-
-class OutputContractError(Exception):
-    pass
 
 
 def resolve_app_dir(default="/app"):
@@ -105,10 +95,10 @@ def filter_projects(projects, app_dir=None):
 
 
 def generate_run_id():
-    """Generate a new run id
+    """Generate a run id.
 
     Returns:
-        str: Takne from env otherwise uuid4
+        str: Taken from env (`METRIC_RUN_ID`/`RUN_ID`) or a fresh UUID4.
     """
     forced = (os.environ.get("METRIC_RUN_ID") or os.environ.get("RUN_ID") or "").strip()
     if forced:
@@ -227,8 +217,7 @@ def _ordered_row(row, canonical_order=None):
 
 
 def enrich_row(row, run_id, schema_version=SCHEMA_VERSION):
-    """ Add to the execution the schema version, run id and status
-    """
+    """Attach schema/run metadata and normalize default status."""
     enriched = dict(row)
     enriched["schema_version"] = schema_version
     enriched["run_id"] = run_id
@@ -246,9 +235,7 @@ def write_jsonl_rows(
     required_fields=None,
     canonical_order=None,
 ):
-    """ 
-    This function is called by each module to write results after the Dockerfile execution
-    """
+    """Validate/enrich rows and write canonical JSONL output."""
     metadata_cache = {}
     prepared = [
         _inject_repo_metadata(
@@ -280,29 +267,3 @@ def write_jsonl_rows(
                 )
                 + "\n"
             )
-
-
-def run_collector(main_fn):
-    try:
-        code = main_fn()
-        if isinstance(code, int):
-            return int(code)
-        return 0
-    except InputContractError as exc:
-        print(f"INPUT_ERROR: {exc}", file=sys.stderr)
-        return EXIT_INPUT_ERROR
-    except ToolExecutionError as exc:
-        print(f"TOOL_ERROR: {exc}", file=sys.stderr)
-        return EXIT_TOOL_ERROR
-    except OutputContractError as exc:
-        print(f"OUTPUT_ERROR: {exc}", file=sys.stderr)
-        return EXIT_OUTPUT_ERROR
-    except FileNotFoundError as exc:
-        print(f"INPUT_ERROR: {exc}", file=sys.stderr)
-        return EXIT_INPUT_ERROR
-    except RuntimeError as exc:
-        print(f"TOOL_ERROR: {exc}", file=sys.stderr)
-        return EXIT_TOOL_ERROR
-    except ValueError as exc:
-        print(f"OUTPUT_ERROR: {exc}", file=sys.stderr)
-        return EXIT_OUTPUT_ERROR

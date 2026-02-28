@@ -15,7 +15,8 @@ for _parent in Path(__file__).resolve().parents:
 if _COMMON_DIR and str(_COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(_COMMON_DIR))
 
-from result_writer import filter_projects, generate_run_id, run_collector, write_jsonl_rows
+from result_writer import filter_projects, generate_run_id, write_jsonl_rows
+from result_executor import run_collector
 
 import lizard
 

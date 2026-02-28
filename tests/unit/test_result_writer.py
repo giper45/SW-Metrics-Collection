@@ -163,7 +163,7 @@ def test_generate_run_id_uses_run_id_alias(monkeypatch):
 
 
 def test_run_collector_maps_runtime_and_value_errors():
-    module = load_module(REPO_ROOT / "metrics/common/result_writer.py")
+    module = load_module(REPO_ROOT / "metrics/common/result_executor.py")
 
     def raise_runtime():
         raise RuntimeError("tool failed")

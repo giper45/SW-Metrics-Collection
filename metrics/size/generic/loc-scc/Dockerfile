@@ -24,6 +24,7 @@ RUN set -eu; \
 WORKDIR /opt/metric
 COPY collect.py run.sh ./
 COPY --from=repo_common result_writer.py /opt/metric/common/result_writer.py
+COPY --from=repo_common result_executor.py /opt/metric/common/result_executor.py
 RUN chmod +x /opt/metric/run.sh
 
 ENTRYPOINT ["/opt/metric/run.sh"]

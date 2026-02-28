@@ -22,7 +22,8 @@ for _parent in Path(__file__).resolve().parents:
 if _COMMON_DIR and str(_COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(_COMMON_DIR))
 
-from result_writer import generate_run_id, run_collector
+from result_writer import generate_run_id
+from result_executor import run_collector
 from typing import Dict, List, Optional
 
 from validator import REQUIRED_COLUMNS, validate_and_normalize_rows

@@ -10,6 +10,7 @@ RUN apt-get update \
 WORKDIR /opt/collector
 COPY collect.py validator.py run.sh ./
 COPY --from=repo_common result_writer.py /opt/collector/common/result_writer.py
+COPY --from=repo_common result_executor.py /opt/collector/common/result_executor.py
 RUN chmod +x /opt/collector/run.sh
 
 ENV APP_ROOT=/app
