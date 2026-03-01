@@ -31,9 +31,9 @@ def test_normalize_results_derives_cc_and_instability(tmp_path: Path):
 
     summary = module.normalize_results(FIXTURE_INPUT, output_dir)
     assert summary["files"] == 2
-    assert summary["derived_rows"] == 2
+    assert summary["derived_rows"] == 3
     assert summary["input_rows"] == 8
-    assert summary["output_rows"] == 10
+    assert summary["output_rows"] == 11
 
     sample_rows = read_jsonl(output_dir / "sample.jsonl")
     assert len(sample_rows) == 8
@@ -55,7 +55,7 @@ def test_normalize_results_derives_cc_and_instability(tmp_path: Path):
     assert instability_row["source_file"] == "sample.jsonl"
 
 
-def test_normalize_results_skips_cc_when_nom_missing_or_zero(tmp_path: Path):
+def test_normalize_results_derives_zero_cc_when_nom_is_zero(tmp_path: Path):
     module = load_module(NORMALIZE_PATH, "analysis_normalize_nom_zero")
     output_dir = tmp_path / "results_normalized"
 
@@ -64,8 +64,11 @@ def test_normalize_results_skips_cc_when_nom_missing_or_zero(tmp_path: Path):
     module.normalize_file(source_file, target_file, FIXTURE_INPUT)
 
     rows = read_jsonl(target_file)
-    assert len(rows) == 2
-    assert not [row for row in rows if row.get("metric") == "cc" and row.get("variant") == "ck-normalized"]
+    assert len(rows) == 3
+    cc_rows = [row for row in rows if row.get("metric") == "cc" and row.get("variant") == "ck-normalized"]
+    assert len(cc_rows) == 1
+    assert cc_rows[0]["component"] == "module-zero"
+    assert cc_rows[0]["value"] == 0.0
 
 
 def test_normalize_results_backfills_legacy_schema_and_run_id(tmp_path: Path):
@@ -162,7 +165,7 @@ def test_normalize_keeps_native_instability_and_adds_derived(tmp_path: Path):
     assert derived[0]["value"] == 0.8
 
 
-def test_normalize_derives_instability_per_component_and_skips_zero_denominator(tmp_path: Path):
+def test_normalize_derives_instability_per_component_and_zero_fills_zero_denominator(tmp_path: Path):
     module = load_module(NORMALIZE_PATH, "analysis_normalize_instability_per_component")
     input_dir = tmp_path / "input"
     output_dir = tmp_path / "out"
@@ -193,9 +196,8 @@ def test_normalize_derives_instability_per_component_and_skips_zero_denominator(
     assert derived["A"]["value"] == 0.666667
     assert derived["B"]["status"] == "ok"
     assert derived["B"]["value"] == 0.0
-    assert derived["C"]["status"] == "skipped"
-    assert derived["C"]["value"] is None
-    assert derived["C"]["skip_reason"] == "zero_denominator"
+    assert derived["C"]["status"] == "ok"
+    assert derived["C"]["value"] == 0.0
     assert derived["D"]["status"] == "skipped"
     assert derived["D"]["value"] is None
     assert derived["D"]["skip_reason"] == "missing_ce_or_ca"

@@ -224,9 +224,12 @@ def _derive_cc_from_wmc_nom(rows: List[Dict], source_file: str) -> List[Dict]:
     for class_key, values in class_measurements.items():
         nom = values.get("nom")
         wmc = values.get("wmc")
-        if nom is None or wmc is None or nom <= 0.0:
+        if nom is None or wmc is None:
             continue
         module_key = (class_key[0], class_key[1]) + class_key[3:]
+        if nom <= 0.0:
+            module_values[module_key].append(0.0)
+            continue
         module_values[module_key].append(wmc / nom)
 
     derived_rows: List[Dict] = []
@@ -443,6 +446,7 @@ def _derive_instability_from_ce_ca(rows: List[Dict], source_file: str) -> List[D
                 "source_metrics": ["ce", "ca"],
                 "scope": "component",
                 "undefined_when": "Ce+Ca=0",
+                "zero_denominator_policy": "emit_zero",
             },
             "timestamp_utc": timestamp_utc,
             "source_tool": source_tool,
@@ -470,9 +474,8 @@ def _derive_instability_from_ce_ca(rows: List[Dict], source_file: str) -> List[D
 
         denom = float(ce_value) + float(ca_value)
         if denom == 0.0:
-            row["status"] = "skipped"
-            row["skip_reason"] = "zero_denominator"
-            row["value"] = None
+            row["status"] = "ok"
+            row["value"] = 0.0
             derived_rows.append(row)
             continue
 

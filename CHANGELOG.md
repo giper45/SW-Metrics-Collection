@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
  
+## [0.4] - 2026-03-01
+
+### Changed
+- Refactor analysis for lcom and make inputs coherent across collectors and analysis.
+
+
+
 ## [0.3] - 2026-03-01
 
 ### Added

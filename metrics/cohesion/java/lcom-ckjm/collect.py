@@ -8,13 +8,17 @@ from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import run_collector, run_command_stdout
 from data_manager import build_module_metric_row, numeric_mean, safe_float
 from error_manager import InputContractError, OutputContractError
-from utils import metric_output_path, utc_timestamp_now
+from utils import (
+    choose_java_input_path,
+    find_java_sources,
+    metric_output_path,
+    utc_timestamp_now,
+)
 from config import JAVA_BYTECODE_DIR_CANDIDATES as BYTECODE_DIR_CANDIDATES, TEST_DIR_NAMES, VENDOR_DIRS
 from input_manager import (
     add_common_cli_args,
     discover_modules,
-    discover_projects,
-    list_source_files)
+    discover_projects)
 from java_bytecode import discover_module_class_files_with_roots
 
 METRIC_NAME = "lcom"
@@ -22,7 +26,6 @@ VARIANT_NAME = "ckjm-default"
 TOOL_NAME = "ckjm"
 CKJM_MAIN_CLASS = "gr.spinellis.ckjm.MetricsFilter"
 CKJM_CLASSPATH = "/opt/tools/ckjm.jar:/opt/tools/commons-lang3.jar"
-JAVA_SOURCE_ROOT_CANDIDATES = ("src/main/java", "main/java")
 
 
 def parse_ckjm_lcom_values(raw_output):
@@ -40,33 +43,19 @@ def parse_ckjm_lcom_values(raw_output):
     return values
 
 
-def _direct_java_sources(module_path: str) -> List[str]:
-    sources: List[str] = []
-    for rel_path in JAVA_SOURCE_ROOT_CANDIDATES:
-        source_root = os.path.join(module_path, rel_path)
-        if not os.path.isdir(source_root):
-            continue
-        sources.extend(
-            list_source_files(
-                source_root,
-                vendor_dirs=VENDOR_DIRS,
-                include_tests=False,
-                test_dir_names=TEST_DIR_NAMES,
-                test_file_markers=(),
-                source_extensions={".java"},
-            )
-        )
-    return sources
-
-
 def collect_module_stats(module_path: str, project_path: str) -> Dict[str, object]:
+    source_input = choose_java_input_path(module_path)
+    java_sources = find_java_sources(
+        source_input,
+        vendor_dirs=VENDOR_DIRS,
+        test_dir_names=TEST_DIR_NAMES,
+    )
     class_files, search_roots, scanned_inputs = discover_module_class_files_with_roots(
         module_path,
         project_path,
         BYTECODE_DIR_CANDIDATES,
         vendor_dirs=VENDOR_DIRS,
     )
-    java_sources = _direct_java_sources(module_path)
     if not class_files:
         if java_sources:
             raise InputContractError(
