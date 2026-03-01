@@ -94,17 +94,17 @@ def test_churn_collect_fails_on_partial_clone_read_only_by_default(monkeypatch):
 
     with monkeypatch.context() as ctx:
         ctx.delenv("METRIC_ERROR_MODE", raising=False)
-        with pytest.raises(Exception) as exc:
+        with pytest.raises(module.ToolExecutionError) as exc:
             module.collect_project_rows(
                 project="junit5",
                 project_path="/app/junit5",
                 tool_version="2.44.0",
                 timestamp="2026-02-27T10:00:00Z",
             )
-        assert exc.value.__class__.__name__ == "ErrorPolicyViolation"
+        assert "partial_clone_read_only" in str(exc.value)
 
 
-def test_churn_collect_can_skip_in_legacy_mode(monkeypatch):
+def test_churn_collect_fails_in_legacy_mode_too(monkeypatch):
     module = load_module(REPO_ROOT / "metrics/evolution/generic/churn-git/collect.py")
 
     def fake_find_git_root(project_path):
@@ -117,14 +117,11 @@ def test_churn_collect_can_skip_in_legacy_mode(monkeypatch):
     monkeypatch.setattr(module, "run_command_details", fake_run_command_details)
     monkeypatch.setenv("METRIC_ERROR_MODE", "legacy-skip")
 
-    rows = module.collect_project_rows(
-        project="junit5",
-        project_path="/app/junit5",
-        tool_version="2.44.0",
-        timestamp="2026-02-27T10:00:00Z",
-    )
-
-    assert len(rows) == 1
-    assert rows[0]["status"] == "skipped"
-    assert rows[0]["skip_reason"] == "git_log_failed"
-    assert rows[0]["value"] is None
+    with pytest.raises(module.ToolExecutionError) as exc:
+        module.collect_project_rows(
+            project="junit5",
+            project_path="/app/junit5",
+            tool_version="2.44.0",
+            timestamp="2026-02-27T10:00:00Z",
+        )
+    assert "git_log_failed" in str(exc.value)

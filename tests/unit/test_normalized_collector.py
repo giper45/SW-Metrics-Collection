@@ -130,13 +130,13 @@ def test_collector_main_error_writes_empty_csv(tmp_path: Path):
         env=with_common_pythonpath(env),
         check=False,
     )
-    assert completed.returncode == 1
+    assert completed.returncode == 4
 
     manifest_paths = sorted(results_dir.glob("*/**/manifest.json"))
     data_paths = sorted(results_dir.glob("*/**/data.csv"))
 
-    assert len(manifest_paths) == 2
-    assert len(data_paths) == 2
+    assert len(manifest_paths) == 1
+    assert len(data_paths) == 1
 
     for manifest_path in manifest_paths:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

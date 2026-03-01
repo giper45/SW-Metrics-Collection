@@ -49,6 +49,45 @@ ARTIFACT_BYTECODE_FALLBACKS = {
     ],
 }
 
+MAVEN_COMMON_FLAGS = (
+    "-DskipTests -Dmaven.test.skip=true -DskipITs "
+    "-Dcheckstyle.skip=true -Dspotbugs.skip=true -Dpmd.skip=true "
+    "-Denforcer.skip=true -Dlicense.skip=true -Drat.skip=true "
+    "-Djacoco.skip=true -Drevapi.skip=true"
+)
+
+OKIO_GRADLE_TARGETS = (
+    ":okio:jvmJar",
+    ":okio-fakefilesystem:jvmJar",
+    ":okio-testing-support:jvmJar",
+    ":samples:compileKotlinJvm",
+)
+
+RETROFIT_GRADLE_TARGETS = (
+    ":retrofit:compileJava",
+    ":retrofit-mock:compileJava",
+    ":retrofit-response-type-keeper:compileKotlin",
+    ":samples:compileKotlin",
+    ":retrofit-adapters:guava:compileJava",
+    ":retrofit-adapters:java8:compileJava",
+    ":retrofit-adapters:rxjava:compileJava",
+    ":retrofit-adapters:rxjava2:compileJava",
+    ":retrofit-adapters:rxjava3:compileJava",
+    ":retrofit-adapters:scala:compileJava",
+    ":retrofit-converters:gson:compileJava",
+    ":retrofit-converters:guava:compileJava",
+    ":retrofit-converters:jackson:compileJava",
+    ":retrofit-converters:java8:compileJava",
+    ":retrofit-converters:jaxb:compileJava",
+    ":retrofit-converters:jaxb3:compileJava",
+    ":retrofit-converters:kotlinx-serialization:compileKotlin",
+    ":retrofit-converters:moshi:compileJava",
+    ":retrofit-converters:protobuf:compileJava",
+    ":retrofit-converters:scalars:compileJava",
+    ":retrofit-converters:simplexml:compileJava",
+    ":retrofit-converters:wire:compileJava",
+)
+
 
 @dataclass
 class BuildTask:
@@ -194,59 +233,77 @@ def _ensure_builder_image(builder_dir: Path, java_version: int) -> str:
 
 
 def _build_command(task: BuildTask) -> str:
+    def _maven_bin() -> str:
+        return "./mvnw" if (task.path / "mvnw").is_file() else "mvn"
+
+    def _maven_cmd(*args: str) -> str:
+        maven_bin = _maven_bin()
+        quoted_args = " ".join(shlex.quote(arg) for arg in args)
+        return f"{maven_bin} --batch-mode -q {MAVEN_COMMON_FLAGS} {quoted_args}".strip()
+
+    def _gradle_cmd(*targets: str) -> str:
+        gradlew_path = task.path / "gradlew"
+        wrapper_jar_path = task.path / "gradle" / "wrapper" / "gradle-wrapper.jar"
+        wrapper_properties_path = task.path / "gradle" / "wrapper" / "gradle-wrapper.properties"
+
+        gradle_bin = "gradle"
+        gradle_bootstrap = ""
+        if gradlew_path.is_file() and wrapper_jar_path.is_file():
+            gradle_bin = "./gradlew"
+        else:
+            dist_url = None
+            if wrapper_properties_path.is_file():
+                try:
+                    for raw in wrapper_properties_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                        line = raw.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        if line.startswith("distributionUrl="):
+                            dist_url = line.split("=", 1)[1].strip().replace("\\:", ":").replace("\\=", "=")
+                            break
+                except OSError:
+                    dist_url = None
+            if not dist_url:
+                dist_url = f"https://services.gradle.org/distributions/gradle-{DEFAULT_GRADLE_VERSION}-bin.zip"
+
+            quoted_url = shlex.quote(dist_url)
+            gradle_bootstrap = (
+                "WRAPPER_DIR=/tmp/gradle-wrapper && "
+                "rm -rf \"$WRAPPER_DIR\" && mkdir -p \"$WRAPPER_DIR\" && "
+                f"curl -fsSL {quoted_url} -o \"$WRAPPER_DIR/gradle.zip\" && "
+                "unzip -q \"$WRAPPER_DIR/gradle.zip\" -d \"$WRAPPER_DIR\" && "
+                "GRADLE_BIN=\"$(find \"$WRAPPER_DIR\" -type f -path '*/bin/gradle' | head -n 1)\" && "
+                "test -n \"$GRADLE_BIN\" && "
+            )
+            gradle_bin = "\"$GRADLE_BIN\""
+
+        target_args = " ".join(shlex.quote(item) for item in targets)
+        return (
+            f"cd /workspace/{task.repo} && "
+            f"chmod +x ./gradlew >/dev/null 2>&1 || true && "
+            f"{gradle_bootstrap}{gradle_bin} --no-daemon {target_args}"
+        )
+
     if task.build_system == "maven":
-        maven_bin = "./mvnw" if (task.path / "mvnw").is_file() else "mvn"
+        if task.repo == "guava":
+            return (
+                f"cd /workspace/{task.repo} && "
+                f"chmod +x ./mvnw >/dev/null 2>&1 || true && "
+                f"{_maven_cmd('-pl', 'guava', '-am', 'compile')} && "
+                f"{_maven_cmd('-pl', 'guava-testlib,guava-tests,guava-gwt', '-am', 'compiler:compile@default-compile')}"
+            )
+
         return (
             f"cd /workspace/{task.repo} && "
             f"chmod +x ./mvnw >/dev/null 2>&1 || true && "
-            f"{maven_bin} --batch-mode -q "
-            "-DskipTests -Dmaven.test.skip=true -DskipITs "
-            "-Dcheckstyle.skip=true -Dspotbugs.skip=true -Dpmd.skip=true "
-            "-Denforcer.skip=true -Dlicense.skip=true -Drat.skip=true "
-            "-Djacoco.skip=true -Drevapi.skip=true "
-            "compile"
+            f"{_maven_cmd('compile')}"
         )
 
-    gradlew_path = task.path / "gradlew"
-    wrapper_jar_path = task.path / "gradle" / "wrapper" / "gradle-wrapper.jar"
-    wrapper_properties_path = task.path / "gradle" / "wrapper" / "gradle-wrapper.properties"
-
-    gradle_bin = "gradle"
-    gradle_bootstrap = ""
-    if gradlew_path.is_file() and wrapper_jar_path.is_file():
-        gradle_bin = "./gradlew"
-    else:
-        dist_url = None
-        if wrapper_properties_path.is_file():
-            try:
-                for raw in wrapper_properties_path.read_text(encoding="utf-8", errors="ignore").splitlines():
-                    line = raw.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    if line.startswith("distributionUrl="):
-                        dist_url = line.split("=", 1)[1].strip().replace("\\:", ":").replace("\\=", "=")
-                        break
-            except OSError:
-                dist_url = None
-        if not dist_url:
-            dist_url = f"https://services.gradle.org/distributions/gradle-{DEFAULT_GRADLE_VERSION}-bin.zip"
-
-        quoted_url = shlex.quote(dist_url)
-        gradle_bootstrap = (
-            "WRAPPER_DIR=/tmp/gradle-wrapper && "
-            "rm -rf \"$WRAPPER_DIR\" && mkdir -p \"$WRAPPER_DIR\" && "
-            f"curl -fsSL {quoted_url} -o \"$WRAPPER_DIR/gradle.zip\" && "
-            "unzip -q \"$WRAPPER_DIR/gradle.zip\" -d \"$WRAPPER_DIR\" && "
-            "GRADLE_BIN=\"$(find \"$WRAPPER_DIR\" -type f -path '*/bin/gradle' | head -n 1)\" && "
-            "test -n \"$GRADLE_BIN\" && "
-        )
-        gradle_bin = "\"$GRADLE_BIN\""
-
-    return (
-        f"cd /workspace/{task.repo} && "
-        f"chmod +x ./gradlew >/dev/null 2>&1 || true && "
-        f"{gradle_bootstrap}{gradle_bin} --no-daemon assemble"
-    )
+    if task.repo == "okio":
+        return _gradle_cmd(*OKIO_GRADLE_TARGETS)
+    if task.repo == "retrofit":
+        return _gradle_cmd(*RETROFIT_GRADLE_TARGETS)
+    return _gradle_cmd("assemble")
 
 
 def _run_build(task: BuildTask, image: str, src_dir: Path) -> subprocess.CompletedProcess:

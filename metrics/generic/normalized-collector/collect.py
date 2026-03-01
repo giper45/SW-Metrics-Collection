@@ -16,6 +16,7 @@ from data_manager import apply_row_customiser, write_csv_rows
 from common_types import NormalizedMetricRow
 from config import GENERIC_SOURCE_EXTENSIONS as SOURCE_EXTENSIONS
 from config import TEST_DIR_NAMES, VENDOR_DIRS
+from error_manager import OutputContractError
 from utils import utc_timestamp_now
 from typing import Dict, List, Optional
 
@@ -299,6 +300,9 @@ def parse_raw_output(
                 }
             )
 
+    if not rows:
+        raise OutputContractError(f"normalized collector produced no parseable rows for metric '{metric_key}'")
+
     return rows
 
 
@@ -405,6 +409,8 @@ def run_for_project(
         manifest["error_message"] = error_message
 
     write_manifest(manifest_path, manifest)
+    if status != "success":
+        raise OutputContractError(error_message or "normalized collector failed")
     return status
 
 
@@ -442,9 +448,8 @@ def main() -> int:
     if not projects:
         return 0
 
-    any_error = False
     for project_path in projects:
-        status = run_for_project(
+        run_for_project(
             project_path=project_path,
             run_id=run_id,
             app_root=app_root,
@@ -458,10 +463,8 @@ def main() -> int:
             command_template=command_template,
             entity_type=entity_type,
             scope_filter=scope_filter)
-        if status != "success":
-            any_error = True
 
-    return 1 if any_error else 0
+    return 0
 
 
 if __name__ == "__main__":

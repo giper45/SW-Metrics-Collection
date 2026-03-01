@@ -7,9 +7,10 @@ import tempfile
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import run_collector, run_command_stdout
-from data_manager import build_module_metric_row, numeric_mean
+from data_manager import build_module_metric_row, numeric_mean, safe_float
 from utils import (
     choose_java_input_path,
+    find_java_sources,
     metric_output_path,
     read_csv_rows_lowercase,
     resolve_output_file_path,
@@ -31,10 +32,24 @@ def collect_module_value(module_path):
     out_dir = tempfile.mkdtemp(prefix="ck-out-")
     try:
         ck_input = choose_java_input_path(module_path)
+        java_sources = find_java_sources(ck_input, vendor_dirs=VENDOR_DIRS)
+        if not java_sources:
+            return 0.0
         run_command_stdout(
             ["java", "-jar", TOOL_JAR, ck_input, "false", "0", "false", out_dir + os.sep])
-        rows = read_csv_rows_lowercase(resolve_output_file_path(out_dir, "class.csv"))
-        return numeric_mean(row.get("lcom") for row in rows)
+        class_csv_path = resolve_output_file_path(out_dir, "class.csv")
+        rows = read_csv_rows_lowercase(class_csv_path)
+        if not rows:
+            return 0.0
+
+        lcom_values = []
+        for row in rows:
+            parsed = safe_float(row.get("lcom"))
+            if parsed is not None:
+                lcom_values.append(parsed)
+        if not lcom_values:
+            return 0.0
+        return numeric_mean(lcom_values)
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)
 

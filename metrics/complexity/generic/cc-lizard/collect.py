@@ -8,6 +8,7 @@ from pathlib import Path
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import run_collector
+from error_manager import ToolExecutionError
 from utils import metric_output_path, utc_timestamp_now
 from config import GENERIC_SOURCE_EXTENSIONS as SOURCE_EXTENSIONS, TEST_DIR_NAMES, TEST_FILE_MARKERS, VENDOR_DIRS
 from input_manager import (
@@ -71,7 +72,12 @@ def collect_project_rows(project, project_path, tool_version, timestamp):
 
     rows = []
     seen_components = {}
-    for file_info in lizard.analyze(source_files):
+    try:
+        file_infos = lizard.analyze(source_files)
+    except Exception as exc:
+        raise ToolExecutionError("lizard analysis failed") from exc
+
+    for file_info in file_infos:
         file_path = normalize_path(file_info.filename)
         for fn in file_info.function_list:
             component, occurrence = build_unique_method_component(

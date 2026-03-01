@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import run_collector, run_command_details
 from data_manager import build_module_metric_row
-from error_manager import ToolExecutionError, error_fallback_or_raise
+from error_manager import ToolExecutionError
 from utils import metric_output_path, utc_timestamp_now
 from config import VENDOR_DIRS
 from input_manager import (
@@ -56,8 +56,8 @@ def parse_jacoco_instruction_ratio(xml_path):
         return 0.0
     try:
         root = ET.parse(xml_path).getroot()
-    except ET.ParseError:
-        return 0.0
+    except ET.ParseError as exc:
+        raise ValueError(f"jacoco report is not valid XML: {xml_path}") from exc
 
     for counter in root.findall("counter"):
         if counter.get("type") == "INSTRUCTION":
@@ -88,15 +88,19 @@ def collect_module_value(module_path):
             f"org.jacoco:jacoco-maven-plugin:{JACOCO_VERSION}:report",
         ]
 
+        timeout_sec = int(os.environ.get("JACOCO_MAVEN_TIMEOUT_SEC", "120"))
         try:
-            _, _, code = run_command_details(cmd, cwd=staging, allowed_returncodes={0, 1})
-        except ToolExecutionError:
-            fallback = error_fallback_or_raise(
-                "maven_execution_failed",
-                category="tool",
-                context=f"module={module_path}",
+            _, _, code = run_command_details(
+                cmd,
+                cwd=staging,
+                allowed_returncodes={0, 1},
+                timeout_sec=timeout_sec,
             )
-            return None, details, str(fallback["skip_reason"])
+        except ToolExecutionError:
+            details["maven_exit_code"] = -1
+            details["maven_ran"] = True
+            details["maven_timed_out"] = True
+            return 0.0, details, None
         details["maven_exit_code"] = int(code)
         details["maven_ran"] = True
 

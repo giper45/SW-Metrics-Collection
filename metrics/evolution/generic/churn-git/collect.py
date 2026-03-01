@@ -5,7 +5,7 @@ import os
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import detect_tool_version, run_collector, run_command_details
-from error_manager import ToolExecutionError, error_fallback_or_raise
+from error_manager import ToolExecutionError
 from utils import metric_output_path, utc_timestamp_now
 from config import TEST_DIR_NAMES, VENDOR_DIRS
 from input_manager import (
@@ -142,12 +142,7 @@ def collect_project_rows(project, project_path, tool_version, timestamp):
         stdout, _, _ = run_command_details(cmd)
     except ToolExecutionError as exc:
         reason = classify_git_log_failure(str(exc))
-        fallback = error_fallback_or_raise(
-            reason,
-            category="tool",
-            context=f"project={project}",
-        )
-        return [skipped_project_row(project, tool_version, timestamp, str(fallback["skip_reason"]))]
+        raise ToolExecutionError(f"project={project}: {reason}") from exc
     file_values = parse_git_numstat_file_map(stdout, project_prefix=rel_project)
     if not file_values:
         return [skipped_project_row(project, tool_version, timestamp, "no_trackable_files")]
@@ -178,7 +173,7 @@ def main():
 
     timestamp = utc_timestamp_now()
     run_id = generate_run_id()
-    projects = filter_projects(discover_projects(args.app_dir), app_dir=args.app_dir)
+    projects = filter_projects(discover_projects(args.app_dir, vendor_dirs=VENDOR_DIRS), app_dir=args.app_dir)
     if not projects:
         return 0
 

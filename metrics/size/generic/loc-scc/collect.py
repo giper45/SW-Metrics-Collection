@@ -3,25 +3,27 @@ import argparse
 import json
 import os
 import shutil
-import tempfile
 
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import detect_tool_version, run_collector, run_command_stdout
+from error_manager import OutputContractError
+from loc_file_rows import build_file_loc_rows, stage_project_files
 from utils import metric_output_path, utc_timestamp_now
 from config import VENDOR_DIRS
 from input_manager import (
     add_common_cli_args,
     discover_projects,
-    is_ignored_dir,
-    normalize_path,
-    stage_source_tree)
+    normalize_path)
 
 METRIC_NAME = "loc"
 VARIANT_NAME = "scc-default"
 TOOL_NAME = "scc"
 
 def parse_scc_file_values(payload, staging_root):
+    if not isinstance(payload, (list, dict)):
+        raise OutputContractError("scc output JSON root must be an array or object")
+
     values = {}
     staging_norm = normalize_path(staging_root).rstrip("/")
 
@@ -67,28 +69,8 @@ def parse_scc_file_values(payload, staging_root):
     return values
 
 
-def parse_scc_json(payload):
-    if isinstance(payload, dict):
-        totals = payload.get("totals")
-        if isinstance(totals, dict) and isinstance(totals.get("Code"), (int, float)):
-            return int(totals["Code"])
-        if isinstance(payload.get("Code"), (int, float)):
-            return int(payload["Code"])
-        return 0
-
-    if isinstance(payload, list):
-        for row in payload:
-            if isinstance(row, dict) and str(row.get("Name", "")).lower() == "total":
-                if isinstance(row.get("Code"), (int, float)):
-                    return int(row["Code"])
-        return sum(int(row["Code"]) for row in payload if isinstance(row, dict) and isinstance(row.get("Code"), (int, float)))
-
-    return 0
-
-
 def collect_project_values(project_path):
-    staging, rel_files = stage_source_tree(project_path, vendor_dirs=VENDOR_DIRS)
-    rel_files = sorted(rel_files)
+    staging, rel_files = stage_project_files(project_path)
     report_path = os.path.join(staging, "scc-report.json")
     try:
         if not rel_files:
@@ -106,9 +88,12 @@ def collect_project_values(project_path):
                 staging,
             ])
         if not os.path.isfile(report_path):
-            return rel_files, {}
-        with open(report_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+            raise OutputContractError(f"scc report not found: {report_path}")
+        try:
+            with open(report_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except json.JSONDecodeError as exc:
+            raise OutputContractError(f"scc report is not valid JSON: {report_path}") from exc
         return rel_files, parse_scc_file_values(payload, staging)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
@@ -121,7 +106,7 @@ def main():
 
     timestamp = utc_timestamp_now()
     run_id = generate_run_id()
-    projects = filter_projects(discover_projects(args.app_dir), app_dir=args.app_dir)
+    projects = filter_projects(discover_projects(args.app_dir, vendor_dirs=VENDOR_DIRS), app_dir=args.app_dir)
     if not projects:
         return 0
 
@@ -130,51 +115,16 @@ def main():
 
     for project, project_path in projects:
         rel_files, values = collect_project_values(project_path)
-        rows = []
-
-        if not rel_files:
-            rows.append(
-                {
-                    "project": project,
-                    "metric": METRIC_NAME,
-                    "variant": VARIANT_NAME,
-                    "component_type": "project",
-                    "component": project,
-                    "status": "skipped",
-                    "skip_reason": "no_files_after_filtering",
-                    "value": None,
-                    "tool": TOOL_NAME,
-                    "tool_version": version,
-                    "parameters": {
-                        "category": "size",
-                        "count_mode": "code_only",
-                        "granularity": "file",
-                        "ignored_dirs": sorted(VENDOR_DIRS),
-                    },
-                    "timestamp_utc": timestamp,
-                }
-            )
-        else:
-            for rel in rel_files:
-                rows.append(
-                    {
-                        "project": project,
-                        "metric": METRIC_NAME,
-                        "variant": VARIANT_NAME,
-                        "component_type": "file",
-                        "component": rel,
-                        "value": float(values.get(rel, 0.0)),
-                        "tool": TOOL_NAME,
-                        "tool_version": version,
-                        "parameters": {
-                            "category": "size",
-                            "count_mode": "code_only",
-                            "granularity": "file",
-                            "ignored_dirs": sorted(VENDOR_DIRS),
-                        },
-                        "timestamp_utc": timestamp,
-                    }
-                )
+        rows = build_file_loc_rows(
+            project=project,
+            metric=METRIC_NAME,
+            variant=VARIANT_NAME,
+            tool=TOOL_NAME,
+            tool_version=version,
+            timestamp_utc=timestamp,
+            rel_files=rel_files,
+            values=values,
+        )
 
         target = metric_output_path(
             args.results_dir,

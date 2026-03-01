@@ -68,6 +68,17 @@ def test_ck_wmc_nom_totals_from_csv(tmp_path):
     assert stats["skipped_nom_zero"] == 1
 
 
+def test_ck_wmc_nom_totals_empty_csv_returns_zeroes(tmp_path):
+    module = load_module(REPO_ROOT / "metrics/complexity/java/cc-ck/collect.py")
+    csv_path = tmp_path / "class.csv"
+    csv_path.write_text("class,package,wmc,nom\n", encoding="utf-8")
+    stats = module.compute_wmc_nom_totals_from_ck(str(csv_path))
+    assert stats["wmc"] == 0.0
+    assert stats["nom"] == 0.0
+    assert stats["valid_classes"] == 0
+    assert stats["skipped_nom_zero"] == 0
+
+
 def test_jdepend_parser_extracts_package_stats():
     module = load_module(REPO_ROOT / "metrics/coupling/java/ce-ca-jdepend/collect.py")
     raw = """

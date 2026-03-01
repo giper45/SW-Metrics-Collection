@@ -28,11 +28,12 @@ def test_error_fallback_or_raise_raises_in_fail_fast(monkeypatch):
         module.error_fallback_or_raise("tool_failed", category="tool", context="module=a")
 
 
-def test_error_fallback_or_raise_returns_skip_in_legacy(monkeypatch):
+def test_error_mode_ignores_legacy_skip_env(monkeypatch):
     module = load_module(REPO_ROOT / "metrics/common/error_manager.py")
     monkeypatch.setenv("METRIC_ERROR_MODE", module.ERROR_MODE_LEGACY_SKIP)
-    payload = module.error_fallback_or_raise("tool_failed", category="tool", context="module=a")
-    assert payload == {"status": "skipped", "skip_reason": "tool_failed"}
+    assert module.error_mode() == module.ERROR_MODE_FAIL_FAST
+    with pytest.raises(module.ErrorPolicyViolation):
+        module.error_fallback_or_raise("tool_failed", category="tool", context="module=a")
 
 
 def test_error_fallback_or_raise_uses_typed_categories(monkeypatch):

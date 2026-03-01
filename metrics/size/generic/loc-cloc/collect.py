@@ -3,19 +3,18 @@ import argparse
 import json
 import os
 import shutil
-import tempfile
 
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import detect_tool_version, run_collector, run_command_stdout
+from error_manager import OutputContractError
+from loc_file_rows import build_file_loc_rows, stage_project_files
 from utils import metric_output_path, utc_timestamp_now
 from config import VENDOR_DIRS
 from input_manager import (
     add_common_cli_args,
     discover_projects,
-    is_ignored_dir,
-    normalize_path,
-    stage_source_tree)
+    normalize_path)
 
 METRIC_NAME = "loc"
 VARIANT_NAME = "cloc-default"
@@ -25,9 +24,9 @@ def parse_cloc_file_values(raw_output, staging_root):
     try:
         payload = json.loads(raw_output)
     except json.JSONDecodeError:
-        return {}
+        raise OutputContractError("cloc output is not valid JSON")
     if not isinstance(payload, dict):
-        return {}
+        raise OutputContractError("cloc output JSON root must be an object")
 
     staging_norm = normalize_path(staging_root).rstrip("/")
     values = {}
@@ -51,28 +50,8 @@ def parse_cloc_file_values(raw_output, staging_root):
     return values
 
 
-def parse_cloc_json(raw_output):
-    try:
-        payload = json.loads(raw_output)
-    except json.JSONDecodeError:
-        return 0
-    if not isinstance(payload, dict):
-        return 0
-    summary = payload.get("SUM")
-    if isinstance(summary, dict) and isinstance(summary.get("code"), (int, float)):
-        return int(summary["code"])
-    total = 0
-    for key, value in payload.items():
-        if key in {"header", "SUM"}:
-            continue
-        if isinstance(value, dict) and isinstance(value.get("code"), (int, float)):
-            total += int(value["code"])
-    return total
-
-
 def collect_project_values(project_path):
-    staging, rel_files = stage_source_tree(project_path, vendor_dirs=VENDOR_DIRS)
-    rel_files = sorted(rel_files)
+    staging, rel_files = stage_project_files(project_path)
     try:
         if not rel_files:
             return rel_files, {}
@@ -89,7 +68,7 @@ def main():
 
     timestamp = utc_timestamp_now()
     run_id = generate_run_id()
-    projects = filter_projects(discover_projects(args.app_dir), app_dir=args.app_dir)
+    projects = filter_projects(discover_projects(args.app_dir, vendor_dirs=VENDOR_DIRS), app_dir=args.app_dir)
     if not projects:
         return 0
 
@@ -98,51 +77,16 @@ def main():
 
     for project, project_path in projects:
         rel_files, values = collect_project_values(project_path)
-        rows = []
-
-        if not rel_files:
-            rows.append(
-                {
-                    "project": project,
-                    "metric": METRIC_NAME,
-                    "variant": VARIANT_NAME,
-                    "component_type": "project",
-                    "component": project,
-                    "status": "skipped",
-                    "skip_reason": "no_files_after_filtering",
-                    "value": None,
-                    "tool": TOOL_NAME,
-                    "tool_version": version,
-                    "parameters": {
-                        "category": "size",
-                        "count_mode": "code_only",
-                        "granularity": "file",
-                        "ignored_dirs": sorted(VENDOR_DIRS),
-                    },
-                    "timestamp_utc": timestamp,
-                }
-            )
-        else:
-            for rel in rel_files:
-                rows.append(
-                    {
-                        "project": project,
-                        "metric": METRIC_NAME,
-                        "variant": VARIANT_NAME,
-                        "component_type": "file",
-                        "component": rel,
-                        "value": float(values.get(rel, 0.0)),
-                        "tool": TOOL_NAME,
-                        "tool_version": version,
-                        "parameters": {
-                            "category": "size",
-                            "count_mode": "code_only",
-                            "granularity": "file",
-                            "ignored_dirs": sorted(VENDOR_DIRS),
-                        },
-                        "timestamp_utc": timestamp,
-                    }
-                )
+        rows = build_file_loc_rows(
+            project=project,
+            metric=METRIC_NAME,
+            variant=VARIANT_NAME,
+            tool=TOOL_NAME,
+            tool_version=version,
+            timestamp_utc=timestamp,
+            rel_files=rel_files,
+            values=values,
+        )
 
         target = metric_output_path(
             args.results_dir,

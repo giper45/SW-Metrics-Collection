@@ -10,6 +10,7 @@ from result_executor import run_collector, run_command_stdout
 from data_manager import build_module_metric_rows, first_numeric_value, numeric_sum
 from utils import (
     choose_java_input_path,
+    find_java_sources,
     metric_output_path,
     read_csv_rows_lowercase,
     resolve_output_file_path,
@@ -35,9 +36,14 @@ def collect_module_values(module_path):
     out_dir = tempfile.mkdtemp(prefix="ck-out-")
     try:
         ck_input = choose_java_input_path(module_path)
+        java_sources = find_java_sources(ck_input, vendor_dirs=VENDOR_DIRS)
+        if not java_sources:
+            return 0.0, 0.0, 0.0
         run_command_stdout(
             ["java", "-jar", TOOL_JAR, ck_input, "false", "0", "false", out_dir + os.sep])
         rows = read_csv_rows_lowercase(resolve_output_file_path(out_dir, "class.csv"))
+        if not rows:
+            return 0.0, 0.0, 0.0
         ce_value = sum_numeric(rows, ["ce", "fanout", "fan_out", "out_degree"])
         ca_value = sum_numeric(rows, ["ca", "fanin", "fan_in", "in_degree"])
         cbo_value = sum_numeric(rows, ["cbo"])

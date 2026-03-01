@@ -6,13 +6,12 @@ import os
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import detect_tool_version, run_collector, run_command_stdout
+from error_manager import OutputContractError
 from utils import metric_output_path, utc_timestamp_now
 from config import TEST_DIR_NAMES, VENDOR_DIRS
 from input_manager import (
     add_common_cli_args,
     discover_projects,
-    is_ignored_dir,
-    is_test_dir,
     list_source_files,
     normalize_path)
 
@@ -34,12 +33,12 @@ def list_python_files(project_path):
 def parse_radon_nodes(raw_output):
     try:
         payload = json.loads(raw_output)
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as exc:
+        raise OutputContractError("radon output is not valid JSON") from exc
 
     rows = []
     if not isinstance(payload, dict):
-        return rows
+        raise OutputContractError("radon output JSON root must be an object")
 
     for path, nodes in sorted(payload.items()):
         if not isinstance(path, str) or not isinstance(nodes, list):
@@ -155,7 +154,7 @@ def main():
 
     timestamp = utc_timestamp_now()
     run_id = generate_run_id()
-    projects = filter_projects(discover_projects(args.app_dir), app_dir=args.app_dir)
+    projects = filter_projects(discover_projects(args.app_dir, vendor_dirs=VENDOR_DIRS), app_dir=args.app_dir)
     if not projects:
         return 0
 

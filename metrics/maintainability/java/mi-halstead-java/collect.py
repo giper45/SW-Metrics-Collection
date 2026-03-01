@@ -11,6 +11,7 @@ from pathlib import Path
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import run_collector
 from data_manager import build_module_metric_row
+from error_manager import InputContractError
 from utils import metric_output_path, utc_timestamp_now
 from config import TEST_DIR_NAMES, VENDOR_DIRS
 from input_manager import (
@@ -181,8 +182,8 @@ def collect_module_metrics(module_path):
     for path in java_files:
         try:
             text = open(path, "r", encoding="utf-8", errors="ignore").read()
-        except OSError:
-            continue
+        except OSError as exc:
+            raise InputContractError(f"cannot read java source file: {path}") from exc
 
         loc = compute_loc(text)
         cc = compute_file_cc(text)

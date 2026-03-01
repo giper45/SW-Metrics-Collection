@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `JAVA_BUILD_BYTECODE` is enabled by default in `Makefile`.
 - `make experiment` no longer includes `code-churn` in `collect-paper-extras` and in manifest expected metrics.
 - Java bytecode preparation now includes sparse-checkout artifact fallback for `junit5:junit-jupiter-engine` and `spring-framework:spring-core`.
+- Complete refactoring of logic for bytecode, input discovery, numpy, input handling, and output data structures using data managers and data classes for improved maintainability and clarity.
 
 ### Fixed
 - CKJM bytecode input discovery now excludes non-`.class` files (e.g. `META-INF/LICENSE`) to prevent collector crashes.

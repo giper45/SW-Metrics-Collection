@@ -23,15 +23,22 @@ def run_command_details(
     cwd=None,
     stdin_text=None,
     allowed_returncodes=None,
+    timeout_sec=None,
 ):
-    completed = subprocess.run(
-        cmd,
-        cwd=cwd,
-        input=None if stdin_text is None else str(stdin_text),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=cwd,
+            input=None if stdin_text is None else str(stdin_text),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ToolExecutionError(
+            f"command timed out after {timeout_sec}s: {_render_command(cmd)}"
+        ) from exc
     allowed = set(allowed_returncodes or {0})
     if completed.returncode not in allowed:
         raise ToolExecutionError(
@@ -48,12 +55,14 @@ def run_command_stdout(
     cwd=None,
     stdin_text=None,
     allowed_returncodes=None,
+    timeout_sec=None,
 ):
     stdout, _, _ = run_command_details(
         cmd,
         cwd=cwd,
         stdin_text=stdin_text,
         allowed_returncodes=allowed_returncodes,
+        timeout_sec=timeout_sec,
     )
     return stdout
 

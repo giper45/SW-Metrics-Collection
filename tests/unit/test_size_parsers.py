@@ -14,17 +14,42 @@ def load_module(path):
 
 def test_cloc_parser_extracts_sum_code():
     module = load_module(REPO_ROOT / "metrics/size/generic/loc-cloc/collect.py")
-    payload = {"header": {}, "SUM": {"blank": 1, "comment": 2, "code": 7}}
-    assert module.parse_cloc_json(json.dumps(payload)) == 7
+    staging = "/tmp/staging"
+    payload = {
+        "header": {},
+        "SUM": {"blank": 1, "comment": 2, "code": 7},
+        f"{staging}/src/A.java": {
+            "blank": 1,
+            "comment": 2,
+            "code": 7,
+            "filename": f"{staging}/src/A.java",
+        },
+    }
+    assert module.parse_cloc_file_values(json.dumps(payload), staging) == {"src/A.java": 7.0}
 
 
 def test_tokei_parser_prefers_total_code():
     module = load_module(REPO_ROOT / "metrics/size/generic/loc-tokei/collect.py")
-    payload = {"Total": {"code": 11, "comments": 2}}
-    assert module.parse_tokei_json(json.dumps(payload)) == 11
+    staging = "/tmp/staging"
+    payload = {
+        "Java": {
+            "children": [
+                {"name": f"{staging}/src/A.java", "stats": {"code": 11, "comments": 2}},
+            ]
+        }
+    }
+    assert module.parse_tokei_file_values(json.dumps(payload), staging) == {"src/A.java": 11.0}
 
 
 def test_scc_parser_supports_totals_dict():
     module = load_module(REPO_ROOT / "metrics/size/generic/loc-scc/collect.py")
-    payload = {"totals": {"Code": 13, "Lines": 20}}
-    assert module.parse_scc_json(payload) == 13
+    staging = "/tmp/staging"
+    payload = {
+        "totals": {"Code": 13, "Lines": 20},
+        "Java": {
+            "Files": [
+                {"Location": f"{staging}/src/A.java", "Code": 13, "Lines": 20},
+            ]
+        },
+    }
+    assert module.parse_scc_file_values(payload, staging) == {"src/A.java": 13.0}

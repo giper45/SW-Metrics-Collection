@@ -2,21 +2,20 @@
 import argparse
 import os
 import re
-from typing import List
 
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import run_collector, run_command_stdout
 from data_manager import build_module_metric_row
-from error_manager import InputContractError, ToolExecutionError, error_fallback_or_raise
+from error_manager import InputContractError, OutputContractError, ToolExecutionError
 from utils import metric_output_path, utc_timestamp_now
 from config import JAVA_BYTECODE_DIR_CANDIDATES as BYTECODE_DIR_CANDIDATES, VENDOR_DIRS
 from input_manager import (
     add_common_cli_args,
-    discover_module_class_files,
     discover_modules,
     discover_projects,
     list_source_files)
+from java_bytecode import discover_module_class_files_with_roots
 
 METRIC_NAME = "ce-ca"
 VARIANT_NAME = "jdepend-default"
@@ -64,51 +63,14 @@ def parse_jdepend_text(raw_output):
     return packages
 
 
-def _unique_paths(paths: List[str]) -> List[str]:
-    out = []
-    seen = set()
-    for path in paths:
-        normalized = os.path.normpath(path)
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        out.append(path)
-    return out
-
-
-def _candidate_bytecode_search_roots(module_path: str, project_path: str) -> List[str]:
-    roots = [module_path]
-    module_name = os.path.basename(os.path.normpath(module_path)).lower()
-    module_parent = os.path.normpath(os.path.dirname(os.path.normpath(module_path)))
-    project_norm = os.path.normpath(project_path)
-
-    # Maven mono-module repositories often have sources in "<repo>/src"
-    # and bytecode in "<repo>/target/classes".
-    if module_name in {"src", "source"} and module_parent == project_norm:
-        roots.append(project_path)
-
-    return _unique_paths(roots)
-
-
 def _discover_module_class_files(module_path: str, project_path: str):
-    class_files = []
-    class_seen = set()
-    bytecode_inputs = []
-    search_roots = _candidate_bytecode_search_roots(module_path, project_path)
-    for root in search_roots:
-        discovered, inputs = discover_module_class_files(
-            root,
-            BYTECODE_DIR_CANDIDATES,
-            vendor_dirs=set(),
-        )
-        bytecode_inputs.extend(inputs)
-        for path in discovered:
-            normalized = os.path.normpath(path)
-            if normalized in class_seen:
-                continue
-            class_seen.add(normalized)
-            class_files.append(path)
-    return class_files, _unique_paths(bytecode_inputs), search_roots
+    class_files, search_roots, bytecode_inputs = discover_module_class_files_with_roots(
+        module_path,
+        project_path,
+        BYTECODE_DIR_CANDIDATES,
+        vendor_dirs=set(),
+    )
+    return class_files, bytecode_inputs, search_roots
 
 
 def _direct_java_sources(module_path: str):
@@ -156,44 +118,12 @@ def aggregate_ce_ca(module_path, project_path):
 
     try:
         output = run_command_stdout(["java", "-cp", TOOL_JAR, "jdepend.textui.JDepend", *jdepend_inputs])
-    except ToolExecutionError:
-        fallback = error_fallback_or_raise(
-            "jdepend_execution_failed",
-            category="tool",
-            context=f"module={module_path}",
-        )
-        return {
-            "status": str(fallback["status"]),
-            "skip_reason": str(fallback["skip_reason"]),
-            "ce": None,
-            "ca": None,
-            "class_files_found": len(class_files),
-            "java_sources_found": len(sources),
-            "bytecode_inputs": jdepend_inputs,
-            "bytecode_mode": "prebuilt",
-            "compile_exit_code": None,
-            "compile_release": None,
-        }
+    except ToolExecutionError as exc:
+        raise ToolExecutionError(f"module={module_path}: jdepend_execution_failed") from exc
 
     packages = parse_jdepend_text(output)
     if not packages:
-        fallback = error_fallback_or_raise(
-            "jdepend_empty_output",
-            category="output",
-            context=f"module={module_path}",
-        )
-        return {
-            "status": str(fallback["status"]),
-            "skip_reason": str(fallback["skip_reason"]),
-            "ce": None,
-            "ca": None,
-            "class_files_found": len(class_files),
-            "java_sources_found": len(sources),
-            "bytecode_inputs": jdepend_inputs,
-            "bytecode_mode": "prebuilt",
-            "compile_exit_code": None,
-            "compile_release": None,
-        }
+        raise OutputContractError(f"module={module_path}: jdepend_empty_output")
 
     ce_total = float(sum(item.get("ce", 0) for item in packages.values()))
     ca_total = float(sum(item.get("ca", 0) for item in packages.values()))

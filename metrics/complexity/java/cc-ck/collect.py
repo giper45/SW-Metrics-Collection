@@ -9,6 +9,7 @@ import tempfile
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import run_collector, run_command_stdout
 from data_manager import build_module_metric_rows, numeric_max, numeric_mean, numeric_percentile, read_csv_rows, safe_float
+from error_manager import OutputContractError
 from utils import (
     choose_java_input_path,
     find_java_sources,
@@ -147,7 +148,7 @@ def compute_cc_proxy_from_ckjm(class_csv_path):
 
 def compute_wmc_nom_totals_from_ck(class_csv_path):
     if not os.path.isfile(class_csv_path):
-        return {"wmc": 0.0, "nom": 0.0, "valid_classes": 0, "skipped_nom_zero": 0}
+        raise OutputContractError(f"ck output file missing: {class_csv_path}")
 
     rows = read_csv_rows(class_csv_path)
     if not rows:
@@ -162,7 +163,7 @@ def compute_wmc_nom_totals_from_ck(class_csv_path):
     package_col = _resolve_column(fieldnames, ["package", "package_name", "pkg", "namespace"])
 
     if not wmc_col or not nom_col:
-        return {"wmc": 0.0, "nom": 0.0, "valid_classes": 0, "skipped_nom_zero": 0}
+        raise OutputContractError(f"ck output missing WMC/NOM columns: {class_csv_path}")
 
     wmc_total = 0.0
     nom_total = 0.0
