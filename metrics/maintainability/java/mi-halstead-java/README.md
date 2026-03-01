@@ -23,7 +23,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  mi-halstead-java:latest --dry-run
+  mi-halstead-java:latest
 ```
 
 ## Output file pattern

@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -73,14 +75,14 @@ def test_git_numstat_parser_ignores_tests():
     assert module.parse_git_numstat(raw) == 12.0
 
 
-def test_churn_collect_skips_partial_clone_read_only(monkeypatch):
+def test_churn_collect_fails_on_partial_clone_read_only_by_default(monkeypatch):
     module = load_module(REPO_ROOT / "metrics/evolution/generic/churn-git/collect.py")
 
-    def fake_find_git_root(project_path, dry_run):
+    def fake_find_git_root(project_path):
         return "/app/junit5"
 
-    def fake_run_command(cmd, dry_run, cwd=None, allowed_returncodes=None):
-        raise RuntimeError(
+    def fake_run_command_details(cmd, cwd=None, stdin_text=None, allowed_returncodes=None):
+        raise module.ToolExecutionError(
             "command failed (128): git -C /app/junit5 log --numstat --format=tformat:\n"
             "stderr: fatal: Unable to create temporary file '/app/junit5/.git/objects/pack/tmp_pack_XXXXXX': Read-only file system\n"
             "fatal: fetch-pack: invalid index-pack output\n"
@@ -88,17 +90,41 @@ def test_churn_collect_skips_partial_clone_read_only(monkeypatch):
         )
 
     monkeypatch.setattr(module, "find_git_root", fake_find_git_root)
-    monkeypatch.setattr(module, "run_command", fake_run_command)
+    monkeypatch.setattr(module, "run_command_details", fake_run_command_details)
+
+    with monkeypatch.context() as ctx:
+        ctx.delenv("METRIC_ERROR_MODE", raising=False)
+        with pytest.raises(Exception) as exc:
+            module.collect_project_rows(
+                project="junit5",
+                project_path="/app/junit5",
+                tool_version="2.44.0",
+                timestamp="2026-02-27T10:00:00Z",
+            )
+        assert exc.value.__class__.__name__ == "ErrorPolicyViolation"
+
+
+def test_churn_collect_can_skip_in_legacy_mode(monkeypatch):
+    module = load_module(REPO_ROOT / "metrics/evolution/generic/churn-git/collect.py")
+
+    def fake_find_git_root(project_path):
+        return "/app/junit5"
+
+    def fake_run_command_details(cmd, cwd=None, stdin_text=None, allowed_returncodes=None):
+        raise module.ToolExecutionError("command failed (128): simulated partial clone issue")
+
+    monkeypatch.setattr(module, "find_git_root", fake_find_git_root)
+    monkeypatch.setattr(module, "run_command_details", fake_run_command_details)
+    monkeypatch.setenv("METRIC_ERROR_MODE", "legacy-skip")
 
     rows = module.collect_project_rows(
         project="junit5",
         project_path="/app/junit5",
         tool_version="2.44.0",
         timestamp="2026-02-27T10:00:00Z",
-        dry_run=False,
     )
 
     assert len(rows) == 1
     assert rows[0]["status"] == "skipped"
-    assert rows[0]["skip_reason"] == "partial_clone_read_only"
+    assert rows[0]["skip_reason"] == "git_log_failed"
     assert rows[0]["value"] is None

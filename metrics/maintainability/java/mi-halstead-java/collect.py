@@ -6,27 +6,26 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-import sys
 
-_COMMON_DIR = None
-for _parent in Path(__file__).resolve().parents:
-    _candidate = _parent / "common" / "result_writer.py"
-    if _candidate.is_file():
-        _COMMON_DIR = _candidate.parent
-        break
-if _COMMON_DIR and str(_COMMON_DIR) not in sys.path:
-    sys.path.insert(0, str(_COMMON_DIR))
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
 from result_executor import run_collector
+from data_manager import build_module_metric_row
+from utils import metric_output_path, utc_timestamp_now
+from config import TEST_DIR_NAMES, VENDOR_DIRS
+from input_manager import (
+    add_common_cli_args,
+    discover_modules,
+    discover_projects,
+    is_ignored_dir,
+    is_test_dir,
+    list_source_files)
 
 METRIC_NAME = "maintainability-index"
 VARIANT_NAME = "mi-halstead-default"
 TOOL_NAME = "java-halstead-analyzer"
 TOOL_VERSION = "1.0.0"
 
-VENDOR_DIRS = {"node_modules", "target", "build", ".venv", "venv", ".git"}
-TEST_DIR_NAMES = {"test", "tests", "__tests__", "spec", "specs", "testing"}
 JAVA_EXT = ".java"
 
 JAVA_KEYWORDS = {
@@ -45,63 +44,19 @@ SYMBOL_OPERATORS = {
 
 TOKEN_RE = re.compile(
     r"//.*?$|/\*.*?\*/|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|\b[A-Za-z_]\w*\b|\b\d+(?:\.\d+)?\b|&&|\|\||==|!=|<=|>=|>>>=|>>>|>>|<<|\+\+|--|\+=|-=|\*=|/=|%=|&=|\|=|\^=|->|::|[+\-*/%&|^~!=<>?:;,.(){}\[\]]",
-    re.S | re.M,
-)
+    re.S | re.M)
 
 DECISION_RE = re.compile(r"\b(if|for|while|case|catch)\b|\?|&&|\|\|")
 
 
-def utc_timestamp_now():
-    forced = os.environ.get("METRIC_TIMESTAMP_UTC") or os.environ.get("METRIC_TIMESTAMP")
-    if forced:
-        return forced
-    return datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def is_ignored_dir(name):
-    return name.startswith(".") or name in VENDOR_DIRS
-
-
-def is_test_dir(name):
-    lowered = name.lower()
-    return lowered in TEST_DIR_NAMES or lowered.startswith("test")
-
-
-def discover_projects(app_dir):
-    try:
-        entries = sorted(os.listdir(app_dir))
-    except OSError:
-        return []
-    return [
-        (name, os.path.join(app_dir, name))
-        for name in entries
-        if os.path.isdir(os.path.join(app_dir, name)) and not is_ignored_dir(name)
-    ]
-
-
-def discover_modules(project_name, project_path):
-    try:
-        entries = sorted(os.listdir(project_path))
-    except OSError:
-        entries = []
-
-    modules = [
-        (name, os.path.join(project_path, name))
-        for name in entries
-        if os.path.isdir(os.path.join(project_path, name)) and not is_ignored_dir(name)
-    ]
-    return modules or [(project_name, project_path)]
-
-
 def find_java_files(module_path):
-    files = []
-    for root, dirnames, filenames in os.walk(module_path):
-        dirnames[:] = sorted(d for d in dirnames if not is_ignored_dir(d) and not is_test_dir(d))
-        for filename in sorted(filenames):
-            if filename.startswith(".") or not filename.endswith(JAVA_EXT):
-                continue
-            files.append(os.path.join(root, filename))
-    return files
+    return list_source_files(
+        module_path,
+        vendor_dirs=VENDOR_DIRS,
+        include_tests=False,
+        test_dir_names=TEST_DIR_NAMES,
+        test_file_markers=(),
+        source_extensions={JAVA_EXT})
 
 
 def strip_comments_for_loc(text):
@@ -215,20 +170,8 @@ def mean(values):
     return float(sum(values) / len(values))
 
 
-def collect_module_metrics(module_path, dry_run):
+def collect_module_metrics(module_path):
     java_files = find_java_files(module_path)
-    if dry_run:
-        preview = java_files[:8]
-        suffix = " ..." if len(java_files) > 8 else ""
-        print("DRY_RUN: analyze", " ".join(preview) + suffix)
-        return 0.0, {
-            "file_count": len(java_files),
-            "halstead_volume_mean": 0.0,
-            "halstead_effort_mean": 0.0,
-            "cc_mean": 0.0,
-            "loc_mean": 0.0,
-        }
-
     mi_values = []
     volumes = []
     efforts = []
@@ -261,58 +204,52 @@ def collect_module_metrics(module_path, dry_run):
     }
 
 
-def output_path(results_dir, project, timestamp):
-    return os.path.join(results_dir, f"{project}-{timestamp}-{METRIC_NAME}-{TOOL_NAME}-{VARIANT_NAME}.jsonl")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Collect module-level maintainability index with Java Halstead analysis")
-    parser.add_argument("--app-dir", default=os.environ.get("SRC_ROOT", os.environ.get("METRIC_APP_DIR", "/app")))
-    parser.add_argument("--results-dir", default=os.environ.get("RESULTS_DIR", os.environ.get("METRIC_RESULTS_DIR", "/results")))
-    parser.add_argument("--dry-run", action="store_true")
+    add_common_cli_args(parser)
     args = parser.parse_args()
 
     timestamp = utc_timestamp_now()
     run_id = generate_run_id()
-    projects = filter_projects(discover_projects(args.app_dir), app_dir=args.app_dir)
+    projects = filter_projects(discover_projects(args.app_dir, vendor_dirs=VENDOR_DIRS), app_dir=args.app_dir)
     if not projects:
-        if args.dry_run:
-            print("DRY_RUN: no projects discovered")
         return 0
 
     os.makedirs(args.results_dir, exist_ok=True)
-    tool_version = "dry-run" if args.dry_run else TOOL_VERSION
+    tool_version = TOOL_VERSION
 
     for project, project_path in projects:
         rows = []
-        for module, module_path in discover_modules(project, project_path):
-            value, details = collect_module_metrics(module_path, args.dry_run)
+        for module, module_path in discover_modules(project, project_path, vendor_dirs=VENDOR_DIRS):
+            value, details = collect_module_metrics(module_path)
             rows.append(
-                {
-                    "project": project,
-                    "metric": METRIC_NAME,
-                    "variant": VARIANT_NAME,
-                    "component_type": "module",
-                    "component": module,
-                    "value": value,
-                    "tool": TOOL_NAME,
-                    "tool_version": tool_version,
-                    "parameters": {
+                build_module_metric_row(
+                    project=project,
+                    module=module,
+                    metric=METRIC_NAME,
+                    variant=VARIANT_NAME,
+                    tool=TOOL_NAME,
+                    tool_version=tool_version,
+                    parameters={
                         "category": "maintainability",
                         "scope_filter": "no_tests",
                         "mi_formula": "171-5.2*ln(V)-0.23*CC-16.2*ln(LOC)",
                         "ignored_dirs": sorted(VENDOR_DIRS),
                         **details,
                     },
-                    "timestamp_utc": timestamp,
-                }
+                    timestamp_utc=timestamp,
+                    value=value,
+                )
             )
 
-        target = output_path(args.results_dir, project, timestamp)
-        if args.dry_run:
-            print("DRY_RUN: would write", len(rows), "rows to", target)
-            continue
-
+        target = metric_output_path(
+            args.results_dir,
+            project,
+            timestamp,
+            METRIC_NAME,
+            TOOL_NAME,
+            VARIANT_NAME,
+        )
         write_jsonl_rows(target, rows, run_id=run_id)
 
     return 0

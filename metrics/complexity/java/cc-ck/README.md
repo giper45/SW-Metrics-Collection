@@ -24,7 +24,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  cc-ck:latest --dry-run
+  cc-ck:latest
 ```
 
 ## Output file pattern

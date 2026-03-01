@@ -23,7 +23,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  loc-scc:latest --dry-run
+  loc-scc:latest
 ```
 
 ## Output file pattern

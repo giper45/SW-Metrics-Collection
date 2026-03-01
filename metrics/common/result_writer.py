@@ -6,11 +6,13 @@ Historical note:
 """
 
 import json
-import math
 import os
 import subprocess
 import uuid
 from collections import OrderedDict
+
+from common_types import MetricRow, RowCustomiser
+from data_manager import apply_row_customiser, is_finite_number, is_number, normalize_row_scalars
 
 SCHEMA_VERSION = "1.0"
 DEFAULT_STATUS = "ok"
@@ -107,7 +109,7 @@ def generate_run_id():
 
 
 def _is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return is_number(value)
 
 
 def _safe_run(cmd):
@@ -189,7 +191,7 @@ def _validate_row(row, required_fields=None, allow_optional=None):
     if status == "ok":
         if not _is_number(row.get("value")):
             raise ValueError("value must be number when status=ok")
-        if not math.isfinite(float(row["value"])):
+        if not is_finite_number(row.get("value")):
             raise ValueError("value must be finite when status=ok")
     else:
         if row.get("value") is not None:
@@ -226,25 +228,28 @@ def enrich_row(row, run_id, schema_version=SCHEMA_VERSION):
 
 
 def write_jsonl_rows(
-    path,
-    rows,
-    run_id,
-    schema_version=SCHEMA_VERSION,
-    dry_run=False,
+    path: str,
+    rows: list[MetricRow],
+    run_id: str,
+    schema_version: str = SCHEMA_VERSION,
     allow_optional=None,
     required_fields=None,
     canonical_order=None,
+    row_customiser: RowCustomiser | None = None,
 ):
     """Validate/enrich rows and write canonical JSONL output."""
     metadata_cache = {}
-    prepared = [
-        _inject_repo_metadata(
-            enrich_row(row, run_id=run_id, schema_version=schema_version),
-            app_dir=resolve_app_dir("/app"),
-            cache=metadata_cache,
-        )
-        for row in rows
-    ]
+    prepared = apply_row_customiser(
+        [
+            _inject_repo_metadata(
+                enrich_row(row, run_id=run_id, schema_version=schema_version),
+                app_dir=resolve_app_dir("/app"),
+                cache=metadata_cache,
+            )
+            for row in rows
+        ],
+        row_customiser=row_customiser,
+    )
     required = set(required_fields or REQUIRED_FIELDS)
     required.update({"schema_version", "run_id"})
     for index, row in enumerate(prepared, start=1):
@@ -253,15 +258,12 @@ def write_jsonl_rows(
         except ValueError as exc:
             raise ValueError(f"row {index}: {exc}") from exc
 
-    if dry_run:
-        print(f"DRY_RUN: would write {len(prepared)} rows to {path}")
-        return
-
     with open(path, "w", encoding="utf-8") as handle:
         for row in prepared:
+            serializable_row = normalize_row_scalars(_ordered_row(row, canonical_order=canonical_order))
             handle.write(
                 json.dumps(
-                    _ordered_row(row, canonical_order=canonical_order),
+                    serializable_row,
                     ensure_ascii=False,
                     separators=(",", ":"),
                 )

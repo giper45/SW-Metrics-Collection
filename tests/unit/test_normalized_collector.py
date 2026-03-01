@@ -11,6 +11,7 @@ COLLECTOR_DIR = REPO_ROOT / "metrics/generic/normalized-collector"
 COLLECTOR_PATH = COLLECTOR_DIR / "collect.py"
 VALIDATOR_PATH = COLLECTOR_DIR / "validator.py"
 FIXTURE_APP = REPO_ROOT / "tests/fixtures/normalized-app"
+COMMON_DIR = REPO_ROOT / "metrics/common"
 
 
 def load_module(path: Path, module_name: str):
@@ -19,6 +20,14 @@ def load_module(path: Path, module_name: str):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def with_common_pythonpath(env: dict[str, str]) -> dict[str, str]:
+    merged = dict(env)
+    existing = merged.get("PYTHONPATH")
+    common = str(COMMON_DIR)
+    merged["PYTHONPATH"] = f"{common}:{existing}" if existing else common
+    return merged
 
 
 def test_discover_projects_detects_git_and_source():
@@ -71,7 +80,11 @@ def test_collector_main_success_writes_manifest_and_csv(tmp_path: Path):
         }
     )
 
-    completed = subprocess.run([sys.executable, str(COLLECTOR_PATH)], env=env, check=False)
+    completed = subprocess.run(
+        [sys.executable, str(COLLECTOR_PATH)],
+        env=with_common_pythonpath(env),
+        check=False,
+    )
     assert completed.returncode == 0
 
     manifest_paths = sorted(results_dir.glob("*/**/manifest.json"))
@@ -112,7 +125,11 @@ def test_collector_main_error_writes_empty_csv(tmp_path: Path):
         }
     )
 
-    completed = subprocess.run([sys.executable, str(COLLECTOR_PATH)], env=env, check=False)
+    completed = subprocess.run(
+        [sys.executable, str(COLLECTOR_PATH)],
+        env=with_common_pythonpath(env),
+        check=False,
+    )
     assert completed.returncode == 1
 
     manifest_paths = sorted(results_dir.glob("*/**/manifest.json"))

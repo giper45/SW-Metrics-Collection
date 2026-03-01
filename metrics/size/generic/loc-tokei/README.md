@@ -23,7 +23,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  loc-tokei:latest --dry-run
+  loc-tokei:latest
 ```
 
 ## Output file pattern

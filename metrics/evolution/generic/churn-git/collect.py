@@ -1,46 +1,22 @@
 #!/usr/bin/env python3
 import argparse
 import os
-import re
-import shlex
-import subprocess
-from datetime import datetime, timezone
-from pathlib import Path
-import sys
 
-_COMMON_DIR = None
-for _parent in Path(__file__).resolve().parents:
-    _candidate = _parent / "common" / "result_writer.py"
-    if _candidate.is_file():
-        _COMMON_DIR = _candidate.parent
-        break
-if _COMMON_DIR and str(_COMMON_DIR) not in sys.path:
-    sys.path.insert(0, str(_COMMON_DIR))
 
 from result_writer import filter_projects, generate_run_id, write_jsonl_rows
-from result_executor import run_collector
+from result_executor import detect_tool_version, run_collector, run_command_details
+from error_manager import ToolExecutionError, error_fallback_or_raise
+from utils import metric_output_path, utc_timestamp_now
+from config import TEST_DIR_NAMES, VENDOR_DIRS
+from input_manager import (
+    add_common_cli_args,
+    discover_projects,
+    is_ignored_dir,
+    normalize_path)
 
 METRIC_NAME = "code-churn"
 VARIANT_NAME = "git-default"
 TOOL_NAME = "git"
-
-VENDOR_DIRS = {"node_modules", "target", "build", ".venv", "venv", ".git"}
-TEST_DIR_NAMES = {"test", "tests", "__tests__", "spec", "specs", "testing"}
-
-
-def utc_timestamp_now():
-    forced = os.environ.get("METRIC_TIMESTAMP_UTC") or os.environ.get("METRIC_TIMESTAMP")
-    if forced:
-        return forced
-    return datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def normalize_path(path):
-    return path.replace("\\", "/")
-
-
-def is_ignored_dir(name):
-    return name.startswith(".") or name in VENDOR_DIRS
 
 
 def is_test_path(path):
@@ -56,50 +32,10 @@ def contains_ignored_dir(path):
     return any(seg in VENDOR_DIRS or seg.startswith(".") for seg in segments)
 
 
-def discover_projects(app_dir):
-    try:
-        entries = sorted(os.listdir(app_dir))
-    except OSError:
-        return []
-    return [
-        (name, os.path.join(app_dir, name))
-        for name in entries
-        if os.path.isdir(os.path.join(app_dir, name)) and not is_ignored_dir(name)
-    ]
-
-
-def run_command(cmd, dry_run, cwd=None, allowed_returncodes=None):
-    if dry_run:
-        print("DRY_RUN:", " ".join(shlex.quote(part) for part in cmd))
-        return "", "", 0
-
-    completed = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
-    allowed = set(allowed_returncodes or {0})
-    if completed.returncode not in allowed:
-        raise RuntimeError(
-            f"command failed ({completed.returncode}): {' '.join(cmd)}\\n"
-            f"stdout: {completed.stdout}\\n"
-            f"stderr: {completed.stderr}"
-        )
-    return completed.stdout, completed.stderr, completed.returncode
-
-
-def get_tool_version(dry_run):
-    out, _, _ = run_command(["git", "--version"], dry_run)
-    if dry_run:
-        return "dry-run"
-    match = re.search(r"(\d+(?:\.\d+)+)", out)
-    return match.group(1) if match else (out.strip() or "unknown")
-
-
-def find_git_root(project_path, dry_run):
-    out, _, code = run_command(
+def find_git_root(project_path):
+    out, _, code = run_command_details(
         ["git", "-C", project_path, "rev-parse", "--show-toplevel"],
-        dry_run,
-        allowed_returncodes={0, 128},
-    )
-    if dry_run:
-        return project_path
+        allowed_returncodes={0, 128})
     if code != 0:
         return None
     root = out.strip()
@@ -148,10 +84,6 @@ def parse_git_numstat(raw_output):
     return round(sum(parse_git_numstat_file_map(raw_output).values()), 6)
 
 
-def output_path(results_dir, project, timestamp):
-    return os.path.join(results_dir, f"{project}-{timestamp}-{METRIC_NAME}-{TOOL_NAME}-{VARIANT_NAME}.jsonl")
-
-
 def common_parameters():
     return {
         "category": "evolution",
@@ -193,8 +125,8 @@ def classify_git_log_failure(error_text):
     return "git_log_failed"
 
 
-def collect_project_rows(project, project_path, tool_version, timestamp, dry_run):
-    git_root = find_git_root(project_path, dry_run)
+def collect_project_rows(project, project_path, tool_version, timestamp):
+    git_root = find_git_root(project_path)
     if git_root is None:
         return [skipped_project_row(project, tool_version, timestamp, "not_a_git_repository")]
 
@@ -207,13 +139,15 @@ def collect_project_rows(project, project_path, tool_version, timestamp, dry_run
         cmd.extend(["--", rel_project])
 
     try:
-        stdout, _, _ = run_command(cmd, dry_run)
-    except RuntimeError as exc:
+        stdout, _, _ = run_command_details(cmd)
+    except ToolExecutionError as exc:
         reason = classify_git_log_failure(str(exc))
-        return [skipped_project_row(project, tool_version, timestamp, reason)]
-    if dry_run:
-        return []
-
+        fallback = error_fallback_or_raise(
+            reason,
+            category="tool",
+            context=f"project={project}",
+        )
+        return [skipped_project_row(project, tool_version, timestamp, str(fallback["skip_reason"]))]
     file_values = parse_git_numstat_file_map(stdout, project_prefix=rel_project)
     if not file_values:
         return [skipped_project_row(project, tool_version, timestamp, "no_trackable_files")]
@@ -239,30 +173,29 @@ def collect_project_rows(project, project_path, tool_version, timestamp, dry_run
 
 def main():
     parser = argparse.ArgumentParser(description="Collect file-level code churn from git history")
-    parser.add_argument("--app-dir", default=os.environ.get("SRC_ROOT", os.environ.get("METRIC_APP_DIR", "/app")))
-    parser.add_argument("--results-dir", default=os.environ.get("RESULTS_DIR", os.environ.get("METRIC_RESULTS_DIR", "/results")))
-    parser.add_argument("--dry-run", action="store_true")
+    add_common_cli_args(parser)
     args = parser.parse_args()
 
     timestamp = utc_timestamp_now()
     run_id = generate_run_id()
     projects = filter_projects(discover_projects(args.app_dir), app_dir=args.app_dir)
     if not projects:
-        if args.dry_run:
-            print("DRY_RUN: no projects discovered")
         return 0
 
     os.makedirs(args.results_dir, exist_ok=True)
-    tool_version = get_tool_version(args.dry_run)
+    tool_version = detect_tool_version(["git", "--version"])
 
     for project, project_path in projects:
-        rows = collect_project_rows(project, project_path, tool_version, timestamp, args.dry_run)
+        rows = collect_project_rows(project, project_path, tool_version, timestamp)
 
-        target = output_path(args.results_dir, project, timestamp)
-        if args.dry_run:
-            print("DRY_RUN: would write", len(rows), "rows to", target)
-            continue
-
+        target = metric_output_path(
+            args.results_dir,
+            project,
+            timestamp,
+            METRIC_NAME,
+            TOOL_NAME,
+            VARIANT_NAME,
+        )
         write_jsonl_rows(target, rows, run_id=run_id)
 
     return 0

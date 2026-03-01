@@ -23,7 +23,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  cc-lizard:latest --dry-run
+  cc-lizard:latest
 ```
 
 ## Output file pattern

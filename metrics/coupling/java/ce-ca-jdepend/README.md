@@ -17,15 +17,6 @@ docker run --rm \
   ce-ca-jdepend:latest
 ```
 
-## Dry run
-
-```bash
-docker run --rm \
-  -v "$(pwd)/src:/app:ro" \
-  -v "$(pwd)/results:/results" \
-  ce-ca-jdepend:latest --dry-run
-```
-
 ## Output file pattern
 
 `/results/<project>-<timestamp>-ce-ca-jdepend-default.jsonl`
@@ -64,5 +55,4 @@ Each line in the output file is one JSON object:
 - value is aggregated package coupling for that dimension.
 - Bytecode-first: JDepend runs on compiled classes from common build folders (`target/classes`, `build/classes/...`, `out/production`).
 - If bytecode is missing for a module that has Java sources, rows are emitted as `status=skipped` with `skip_reason` (no source-based fallback is used).
-- Optional local compile fallback can be enabled/disabled via `JDEPEND_ENABLE_LOCAL_COMPILE_FALLBACK` (default: enabled); fallback compile uses `javac --release 8` by default (`JDEPEND_FALLBACK_JAVA_RELEASE` to override).
 - `Ce` may include dependencies toward external packages (for example `java.lang`) when reported by JDepend.

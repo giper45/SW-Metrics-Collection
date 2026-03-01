@@ -1,6 +1,6 @@
 # ce-ca-ck-cbo
 
-Module-level coupling proxy using ck (CBO aggregate).
+Module-level coupling proxies from CK `class.csv` (Ce/Ca proxies + CBO).
 
 ## Build
 
@@ -17,18 +17,9 @@ docker run --rm \
   ce-ca-ck-cbo:latest
 ```
 
-## Dry run
-
-```bash
-docker run --rm \
-  -v "$(pwd)/src:/app:ro" \
-  -v "$(pwd)/results:/results" \
-  ce-ca-ck-cbo:latest --dry-run
-```
-
 ## Output file pattern
 
-`/results/<project>-<timestamp>-ce-ca-ck-cbo-agg.jsonl`
+`/results/<project>-<timestamp>-ce-ca-ck-ck-ce-ca-proxy.jsonl`
 
 Timestamp format is UTC ISO8601 with seconds (for example `2026-02-24T15:04:05Z`).
 
@@ -40,7 +31,7 @@ Each line in the output file is one JSON object:
 {
   "project": "string",
   "metric": "ce-ca",
-  "variant": "ck-cbo-agg",
+  "variant": "ck-ce-ca-proxy",
   "component_type": "module",
   "component": "string",
   "value": 0.0,
@@ -60,5 +51,5 @@ Each line in the output file is one JSON object:
 
 ## Collector notes
 
-- Uses mean class CBO as a Ce/Ca proxy.
-- Emits one row per module with parameters.dimension=cbo_mean_proxy.
+- Emits module-level rows from class-level CK metrics.
+- Produces paired `ce-ca` rows (`parameters.dimension` = `ce` and `ca`) plus a `cbo` metric row.

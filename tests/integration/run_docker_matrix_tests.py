@@ -124,7 +124,7 @@ CONTAINERS = [
         "image": "ce-ca-ck-cbo:test",
         "fixture": JAVA_COUPLING_FIXTURE,
         "metric": "ce-ca",
-        "variant": "ck-cbo-agg",
+        "variant": "ck-ce-ca-proxy",
         "expected_components": JAVA_COUPLING_COMPONENTS,
         "require_positive_any": True,
     },
@@ -290,11 +290,20 @@ def validate_schema(row):
     if not isinstance(row["parameters"], dict):
         raise AssertionError(f"parameters must be object, got {type(row['parameters'])}")
 
+    status = str(row.get("status", "ok"))
+    if status not in {"ok", "skipped"}:
+        raise AssertionError(f"status must be ok|skipped, got {status}")
     value = row["value"]
-    if not isinstance(value, (int, float)):
-        raise AssertionError(f"value must be numeric, got {type(value)}")
-    if not math.isfinite(float(value)):
-        raise AssertionError(f"value must be finite, got {value}")
+    if status == "skipped":
+        if value is not None:
+            raise AssertionError(f"value must be null when skipped, got {value}")
+        if "skip_reason" in row and not isinstance(row.get("skip_reason"), str):
+            raise AssertionError("skip_reason must be string when present")
+    else:
+        if not isinstance(value, (int, float)):
+            raise AssertionError(f"value must be numeric, got {type(value)}")
+        if not math.isfinite(float(value)):
+            raise AssertionError(f"value must be finite, got {value}")
     if row["timestamp_utc"] != TIMESTAMP:
         raise AssertionError(f"unexpected timestamp_utc: {row['timestamp_utc']}")
 
@@ -308,6 +317,8 @@ def resolve_fixture(case, dynamic_churn_fixture):
 def map_single_row_per_component(rows, label):
     mapped = {}
     for row in rows:
+        if str(row.get("status", "ok")) == "skipped":
+            continue
         key = module_key(row)
         if key in mapped:
             raise AssertionError(f"duplicate row for component in {label}: {key}")
@@ -318,6 +329,8 @@ def map_single_row_per_component(rows, label):
 def map_ce_ca_rows(rows):
     mapped = {}
     for row in rows:
+        if str(row.get("status", "ok")) == "skipped":
+            continue
         key = module_key(row)
         dimension = str(row.get("parameters", {}).get("dimension", "")).lower()
         if dimension not in {"ce", "ca"}:

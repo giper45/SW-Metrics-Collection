@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.4
 FROM python:3.11-slim
 
+RUN pip install --no-cache-dir numpy pandas
+
 ARG TOOL_PACKAGE=cloc
 
 RUN apt-get update \
@@ -9,8 +11,7 @@ RUN apt-get update \
 
 WORKDIR /opt/collector
 COPY collect.py validator.py run.sh ./
-COPY --from=repo_common result_writer.py /opt/collector/common/result_writer.py
-COPY --from=repo_common result_executor.py /opt/collector/common/result_executor.py
+COPY --from=repo_common *.py /opt/collector/common/
 RUN chmod +x /opt/collector/run.sh
 
 ENV APP_ROOT=/app

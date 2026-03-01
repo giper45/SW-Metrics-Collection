@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import math
 from typing import Dict, List
+
+import numpy as np
 
 REQUIRED_COLUMNS = [
     "entity_type",
@@ -48,7 +49,7 @@ def _as_float(value: object, field_name: str) -> float:
         number = float(value)
     except Exception as exc:
         raise ValueError(f"{field_name} must be float-compatible") from exc
-    if math.isnan(number) or math.isinf(number):
+    if not np.isfinite(number):
         raise ValueError(f"{field_name} must be finite float")
     return number
 

@@ -23,7 +23,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  cc-radon:latest --dry-run
+  cc-radon:latest
 ```
 
 ## Output file pattern

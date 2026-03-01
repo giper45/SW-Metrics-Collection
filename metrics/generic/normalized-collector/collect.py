@@ -1,60 +1,27 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import csv
 import json
 import os
 import re
 import shlex
 import shutil
-import subprocess
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
-import sys
 
-_COMMON_DIR = None
-for _parent in Path(__file__).resolve().parents:
-    _candidate = _parent / "common" / "result_writer.py"
-    if _candidate.is_file():
-        _COMMON_DIR = _candidate.parent
-        break
-if _COMMON_DIR and str(_COMMON_DIR) not in sys.path:
-    sys.path.insert(0, str(_COMMON_DIR))
 
 from result_writer import generate_run_id
-from result_executor import run_collector
+from result_executor import run_collector, run_command_details
+from data_manager import apply_row_customiser, write_csv_rows
+from common_types import NormalizedMetricRow
+from config import GENERIC_SOURCE_EXTENSIONS as SOURCE_EXTENSIONS
+from config import TEST_DIR_NAMES, VENDOR_DIRS
+from utils import utc_timestamp_now
 from typing import Dict, List, Optional
 
 from validator import REQUIRED_COLUMNS, validate_and_normalize_rows
 
-EXCLUDED_DIR_NAMES = {
-    "test",
-    "tests",
-    "spec",
-    "vendor",
-    "node_modules",
-    "target",
-    "build",
-    ".git",
-}
-SOURCE_EXTENSIONS = {
-    ".java",
-    ".py",
-    ".js",
-    ".ts",
-    ".c",
-    ".cpp",
-    ".h",
-    ".hpp",
-    ".cs",
-    ".go",
-    ".rb",
-    ".php",
-    ".kt",
-    ".scala",
-    ".swift",
-}
+EXCLUDED_DIR_NAMES = set(TEST_DIR_NAMES) | set(VENDOR_DIRS) | {"vendor"}
 
 CANONICAL_METRICS = {
     "loc_code",
@@ -68,10 +35,6 @@ CANONICAL_METRICS = {
     "instability",
     "lcom_mean",
 }
-
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def should_skip_dir(name: str) -> bool:
@@ -149,16 +112,11 @@ def resolve_tool_version(version_override: str, version_command: str) -> str:
         return "unknown"
 
     try:
-        proc = subprocess.run(
-            shlex.split(version_command),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        stdout, stderr, _ = run_command_details(shlex.split(version_command))
     except Exception:
         return "unknown"
 
-    raw = (proc.stdout or proc.stderr or "").strip()
+    raw = (stdout or stderr or "").strip()
     if not raw:
         return "unknown"
 
@@ -209,8 +167,7 @@ def cloc_rows_from_json(
     tool_key: str,
     variant_key: str,
     scope_filter: str,
-    path_hint: str,
-) -> List[Dict]:
+    path_hint: str) -> List[Dict]:
     summary = payload.get("SUM", {}) if isinstance(payload, dict) else {}
     code = float(summary.get("code", 0) or 0)
     comment = float(summary.get("comment", 0) or 0)
@@ -245,8 +202,7 @@ def parse_raw_output(
     language: str,
     variant_key: str,
     scope_filter: str,
-    path_hint: str,
-) -> List[Dict]:
+    path_hint: str) -> List[Dict]:
     rows: List[Dict] = []
 
     if metric_key == "loc" and tool_key == "cloc":
@@ -261,8 +217,7 @@ def parse_raw_output(
                     tool_key,
                     variant_key,
                     scope_filter,
-                    path_hint,
-                )
+                    path_hint)
         except Exception:
             pass
 
@@ -279,8 +234,7 @@ def parse_raw_output(
 
             metric_name = normalize_metric_name(
                 str(item.get("metric_name") or item.get("metric") or metric_key),
-                metric_key,
-            )
+                metric_key)
             raw_value = item.get("metric_value", item.get("value", 0))
             try:
                 metric_value = float(raw_value)
@@ -348,13 +302,8 @@ def parse_raw_output(
     return rows
 
 
-def write_csv(path: Path, rows: List[Dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=REQUIRED_COLUMNS)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({column: row.get(column, "") for column in REQUIRED_COLUMNS})
+def write_csv(path: Path, rows: List[NormalizedMetricRow]) -> None:
+    write_csv_rows(path, rows, columns=REQUIRED_COLUMNS)
 
 
 def write_manifest(path: Path, manifest: Dict) -> None:
@@ -362,6 +311,16 @@ def write_manifest(path: Path, manifest: Dict) -> None:
     with path.open("w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2, sort_keys=True)
         handle.write("\n")
+
+
+def apply_project_row_customisation(rows: List[Dict], path_hint: str) -> List[Dict]:
+    def _customiser(row: Dict) -> Dict:
+        updated = dict(row)
+        if not str(updated.get("path_hint", "")).strip():
+            updated["path_hint"] = path_hint
+        return updated
+
+    return apply_row_customiser(rows, row_customiser=_customiser)
 
 
 def run_for_project(
@@ -377,8 +336,7 @@ def run_for_project(
     container_image: str,
     command_template: str,
     entity_type: str,
-    scope_filter: str,
-) -> str:
+    scope_filter: str) -> str:
     output_dir = results_root / project_path.name / run_id / metric_key / tool_key
     manifest_path = output_dir / "manifest.json"
     data_path = output_dir / "data.csv"
@@ -398,19 +356,14 @@ def run_for_project(
         formatted_command = command_template.format(
             project_path=str(filtered_project),
             original_project_path=str(project_path),
-            project_name=project_path.name,
-        )
+            project_name=project_path.name)
         command_args = shlex.split(formatted_command)
         command_executed = " ".join(shlex.quote(arg) for arg in command_args)
 
-        proc = subprocess.run(command_args, capture_output=True, text=True, check=False)
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"tool_failed exit_code={proc.returncode}; stderr={proc.stderr.strip()}; stdout={proc.stdout.strip()}"
-            )
+        stdout, _, _ = run_command_details(command_args)
 
         parsed_rows = parse_raw_output(
-            stdout=proc.stdout,
+            stdout=stdout,
             metric_key=metric_key,
             tool_key=tool_key,
             entity_type=entity_type,
@@ -418,9 +371,11 @@ def run_for_project(
             language=language,
             variant_key=variant_key,
             scope_filter=scope_filter,
+            path_hint=path_hint)
+        rows = apply_project_row_customisation(
+            validate_and_normalize_rows(parsed_rows),
             path_hint=path_hint,
         )
-        rows = validate_and_normalize_rows(parsed_rows)
 
     except Exception as exc:
         status = "error"
@@ -442,7 +397,7 @@ def run_for_project(
         "tool_version": tool_version,
         "container_image": container_image,
         "source_path": str(project_path),
-        "generated_at_utc": utc_now_iso(),
+        "generated_at_utc": utc_timestamp_now(),
         "command": command_executed or command_template,
         "status": status,
     }
@@ -471,8 +426,7 @@ def main() -> int:
 
     tool_version = resolve_tool_version(
         version_override=os.environ.get("TOOL_VERSION", "").strip(),
-        version_command=os.environ.get("TOOL_VERSION_COMMAND", "cloc --version").strip(),
-    )
+        version_command=os.environ.get("TOOL_VERSION_COMMAND", "cloc --version").strip())
 
     run_id = generate_run_id()
     projects = discover_projects(app_root)
@@ -503,8 +457,7 @@ def main() -> int:
             container_image=container_image,
             command_template=command_template,
             entity_type=entity_type,
-            scope_filter=scope_filter,
-        )
+            scope_filter=scope_filter)
         if status != "success":
             any_error = True
 

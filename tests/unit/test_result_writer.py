@@ -173,3 +173,20 @@ def test_run_collector_maps_runtime_and_value_errors():
 
     assert module.run_collector(raise_runtime) == module.EXIT_TOOL_ERROR
     assert module.run_collector(raise_value) == module.EXIT_OUTPUT_ERROR
+
+
+def test_run_collector_maps_typed_contract_errors():
+    module = load_module(REPO_ROOT / "metrics/common/result_executor.py")
+
+    def raise_input():
+        raise module.InputContractError("missing input")
+
+    def raise_tool():
+        raise module.ToolExecutionError("tool failed")
+
+    def raise_output():
+        raise module.OutputContractError("invalid output")
+
+    assert module.run_collector(raise_input) == module.EXIT_INPUT_ERROR
+    assert module.run_collector(raise_tool) == module.EXIT_TOOL_ERROR
+    assert module.run_collector(raise_output) == module.EXIT_OUTPUT_ERROR

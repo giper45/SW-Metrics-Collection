@@ -17,15 +17,6 @@ docker run --rm \
   duplication-jscpd:latest
 ```
 
-## Dry run
-
-```bash
-docker run --rm \
-  -v "$(pwd)/src:/app:ro" \
-  -v "$(pwd)/results:/results" \
-  duplication-jscpd:latest --dry-run
-```
-
 ## Output file pattern
 
 `/results/<project>-<timestamp>-duplication-rate-jscpd-default.jsonl`
@@ -34,3 +25,4 @@ docker run --rm \
 
 - `value` is duplication ratio in `[0,1]` for each module.
 - Test and vendor directories are excluded (`scope_filter=no_tests`).
+- Policy skipped uniforme: se un modulo non contiene file Java validi o `jscpd` fallisce, viene emessa una riga `status=skipped`, `value=null`, `skip_reason` valorizzato.

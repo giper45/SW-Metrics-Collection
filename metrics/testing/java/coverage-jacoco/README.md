@@ -17,15 +17,6 @@ docker run --rm \
   coverage-jacoco:latest
 ```
 
-## Dry run
-
-```bash
-docker run --rm \
-  -v "$(pwd)/src:/app:ro" \
-  -v "$(pwd)/results:/results" \
-  coverage-jacoco:latest --dry-run
-```
-
 ## Output file pattern
 
 `/results/<project>-<timestamp>-test-coverage-jacoco-default.jsonl`
@@ -34,3 +25,4 @@ docker run --rm \
 
 - `value` is instruction coverage ratio in `[0,1]`.
 - Modules without a `pom.xml` return `0.0`.
+- Policy skipped uniforme: se un modulo non ha file sorgente o l'esecuzione Maven fallisce, viene emessa una riga `status=skipped`, `value=null`, `skip_reason` valorizzato.

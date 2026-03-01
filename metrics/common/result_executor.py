@@ -1,23 +1,71 @@
 #!/usr/bin/env python3
 """Collector runtime execution helpers (error -> exit-code mapping)."""
 
+import re
+import subprocess
 import sys
+
+from error_manager import InputContractError, OutputContractError, ToolExecutionError
 
 EXIT_INPUT_ERROR = 2
 EXIT_TOOL_ERROR = 3
 EXIT_OUTPUT_ERROR = 4
 
-
-class InputContractError(Exception):
-    pass
-
-
-class ToolExecutionError(Exception):
-    pass
+def _render_command(cmd):
+    if isinstance(cmd, (list, tuple)):
+        return " ".join(str(part) for part in cmd)
+    return str(cmd)
 
 
-class OutputContractError(Exception):
-    pass
+def run_command_details(
+    cmd,
+    *,
+    cwd=None,
+    stdin_text=None,
+    allowed_returncodes=None,
+):
+    completed = subprocess.run(
+        cmd,
+        cwd=cwd,
+        input=None if stdin_text is None else str(stdin_text),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    allowed = set(allowed_returncodes or {0})
+    if completed.returncode not in allowed:
+        raise ToolExecutionError(
+            f"command failed ({completed.returncode}): {_render_command(cmd)}\n"
+            f"stdout: {completed.stdout}\n"
+            f"stderr: {completed.stderr}"
+        )
+    return completed.stdout or "", completed.stderr or "", int(completed.returncode)
+
+
+def run_command_stdout(
+    cmd,
+    *,
+    cwd=None,
+    stdin_text=None,
+    allowed_returncodes=None,
+):
+    stdout, _, _ = run_command_details(
+        cmd,
+        cwd=cwd,
+        stdin_text=stdin_text,
+        allowed_returncodes=allowed_returncodes,
+    )
+    return stdout
+
+
+def detect_tool_version(command, *, pattern=r"(\d+(?:\.\d+)+)", fallback="unknown"):
+    output = run_command_stdout(command).strip()
+    if not output:
+        return str(fallback)
+    match = re.search(pattern, output)
+    if not match:
+        return output or str(fallback)
+    return match.group(1)
 
 
 def execute_collector(main_fn):
@@ -40,6 +88,7 @@ def execute_collector(main_fn):
         print(f"INPUT_ERROR: {exc}", file=sys.stderr)
         return EXIT_INPUT_ERROR
     except RuntimeError as exc:
+        # Compatibility path for legacy collectors still raising RuntimeError.
         print(f"TOOL_ERROR: {exc}", file=sys.stderr)
         return EXIT_TOOL_ERROR
     except ValueError as exc:
@@ -50,4 +99,3 @@ def execute_collector(main_fn):
 def run_collector(main_fn):
     """Backward-compatible alias for :func:`execute_collector`."""
     return execute_collector(main_fn)
-

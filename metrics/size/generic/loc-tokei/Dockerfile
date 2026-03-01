@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.4
 FROM python:3.11-slim
 
+RUN pip install --no-cache-dir numpy pandas
+
 ARG TOKEI_VERSION=12.1.2
 ARG TARGETARCH
 
@@ -22,8 +24,7 @@ RUN set -eu; \
 
 WORKDIR /opt/metric
 COPY collect.py run.sh ./
-COPY --from=repo_common result_writer.py /opt/metric/common/result_writer.py
-COPY --from=repo_common result_executor.py /opt/metric/common/result_executor.py
+COPY --from=repo_common *.py /opt/metric/common/
 RUN chmod +x /opt/metric/run.sh
 
 ENTRYPOINT ["/opt/metric/run.sh"]

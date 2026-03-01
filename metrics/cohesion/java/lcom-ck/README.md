@@ -23,7 +23,7 @@ docker run --rm \
 docker run --rm \
   -v "$(pwd)/src:/app:ro" \
   -v "$(pwd)/results:/results" \
-  lcom-ck:latest --dry-run
+  lcom-ck:latest
 ```
 
 ## Output file pattern
