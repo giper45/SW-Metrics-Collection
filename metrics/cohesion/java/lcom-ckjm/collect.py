@@ -44,11 +44,15 @@ def parse_ckjm_lcom_values(raw_output):
 
 
 def collect_module_stats(module_path: str, project_path: str) -> Dict[str, object]:
-    source_input = choose_java_input_path(module_path)
-    java_sources = find_java_sources(
-        source_input,
-        vendor_dirs=VENDOR_DIRS,
-        test_dir_names=TEST_DIR_NAMES,
+    source_input = choose_java_input_path(module_path, fallback_to_module=False)
+    java_sources = (
+        find_java_sources(
+            source_input,
+            vendor_dirs=VENDOR_DIRS,
+            test_dir_names=TEST_DIR_NAMES,
+        )
+        if source_input
+        else []
     )
     class_files, search_roots, scanned_inputs = discover_module_class_files_with_roots(
         module_path,

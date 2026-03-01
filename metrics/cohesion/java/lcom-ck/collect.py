@@ -31,7 +31,9 @@ TOOL_JAR = "/opt/tools/ck.jar"
 def collect_module_value(module_path):
     out_dir = tempfile.mkdtemp(prefix="ck-out-")
     try:
-        ck_input = choose_java_input_path(module_path)
+        ck_input = choose_java_input_path(module_path, fallback_to_module=False)
+        if not ck_input:
+            return 0.0
         java_sources = find_java_sources(ck_input, vendor_dirs=VENDOR_DIRS)
         if not java_sources:
             return 0.0

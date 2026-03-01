@@ -30,11 +30,16 @@ def find_java_sources(module_path, *, vendor_dirs=None, test_dir_names=None):
     )
 
 
-def choose_java_input_path(module_path, *, relative_candidates=JAVA_INPUT_DIR_CANDIDATES):
+def choose_java_input_path(
+    module_path,
+    *,
+    relative_candidates=JAVA_INPUT_DIR_CANDIDATES,
+    fallback_to_module=True,
+):
     return choose_first_existing_dir(
         module_path,
         relative_candidates,
-        fallback=module_path,
+        fallback=module_path if fallback_to_module else None,
     )
 
 

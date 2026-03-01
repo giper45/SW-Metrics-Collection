@@ -290,7 +290,15 @@ def _build_command(task: BuildTask) -> str:
                 f"cd /workspace/{task.repo} && "
                 f"chmod +x ./mvnw >/dev/null 2>&1 || true && "
                 f"{_maven_cmd('-pl', 'guava', '-am', 'compile')} && "
-                f"{_maven_cmd('-pl', 'guava-testlib,guava-tests,guava-gwt', '-am', 'compiler:compile@default-compile')}"
+                f"{_maven_cmd('-pl', 'guava-testlib,guava-tests,guava-gwt', '-am', 'compiler:compile@default-compile')} && "
+                f"cd /workspace/{task.repo}/android && "
+                f"../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} -pl guava,guava-testlib,guava-tests -am compile && "
+                f"cd /workspace/{task.repo}/futures/failureaccess && "
+                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} compile && "
+                f"cd /workspace/{task.repo}/futures/listenablefuture1 && "
+                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} compile && "
+                f"cd /workspace/{task.repo}/futures/listenablefuture9999 && "
+                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} compile"
             )
 
         return (

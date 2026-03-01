@@ -115,7 +115,7 @@ def test_jdepend_parser_supports_textui_291_format():
     assert parsed["com.acme.core"]["i"] == 0.67
 
 
-def test_lcom_ckjm_requires_bytecode_when_java_sources_exist_outside_standard_roots(tmp_path, monkeypatch):
+def test_lcom_ckjm_ignores_non_standard_java_roots_for_bytecode_requirement(tmp_path, monkeypatch):
     module = load_module(REPO_ROOT / "metrics/cohesion/java/lcom-ckjm/collect.py")
 
     module_path = tmp_path / "module-a"
@@ -129,5 +129,6 @@ def test_lcom_ckjm_requires_bytecode_when_java_sources_exist_outside_standard_ro
         lambda *_args, **_kwargs: ([], [str(module_path)], []),
     )
 
-    with pytest.raises(module.InputContractError):
-        module.collect_module_stats(str(module_path), str(tmp_path))
+    stats = module.collect_module_stats(str(module_path), str(tmp_path))
+    assert stats["value"] == 0.0
+    assert stats["java_sources_found"] == 0

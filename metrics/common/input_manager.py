@@ -191,12 +191,17 @@ def stage_source_tree(
     return staging_dir, rel_files
 
 
-def choose_first_existing_dir(base_path, relative_candidates, fallback=None):
+_UNSET = object()
+
+
+def choose_first_existing_dir(base_path, relative_candidates, fallback=_UNSET):
     for rel in relative_candidates:
         candidate = os.path.join(base_path, rel)
         if os.path.isdir(candidate):
             return candidate
-    return fallback if fallback is not None else base_path
+    if fallback is _UNSET:
+        return base_path
+    return fallback
 
 
 def discover_class_files(base_dir, vendor_dirs=None):
