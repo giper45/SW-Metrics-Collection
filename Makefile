@@ -7,7 +7,7 @@ EXPERIMENT_RUN_ID := $(if $(METRIC_RUN_ID),$(METRIC_RUN_ID),$(shell python3 -c '
 METRIC_RESOURCE_TRACKING ?= 0
 METRIC_RESOURCE_SAMPLE_SEC ?= 0.5
 METRIC_RESOURCE_REPORT ?= $(ANALYSIS_OUT_DIR)/metric-runtime-$(EXPERIMENT_RUN_ID).jsonl
-JAVA_BUILD_BYTECODE ?= 0
+JAVA_BUILD_BYTECODE ?= 1
 JAVA_BUILD_STRICT ?= 0
 JAVA_BUILD_FORCE ?= 0
 DOCKER_RUN_METRIC_BASE := docker run --rm -e METRIC_RUN_ID=$(EXPERIMENT_RUN_ID) -v $(SRC_DIR):/app:ro -v $(RESULTS_DIR):/results
@@ -28,7 +28,6 @@ DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_commo
 	collect-lcom-ckjm \
 	collect-duplication-jscpd \
 	collect-mi-halstead-java \
-	collect-static-warnings-checkstyle \
 	collect-coverage-jacoco \
 	collect-churn-git \
 	collect-size-all \
@@ -40,6 +39,7 @@ DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_commo
 	prepare-java-bytecode \
 	prepare-java-bytecode-if-enabled \
 	clean-experiment \
+	print-experiment \
 	print-run-id \
 	manifest \
 	normalize \
@@ -113,10 +113,6 @@ collect-mi-halstead-java:
 	$(DOCKER_BUILD_METRIC) -t mi-halstead-java:latest metrics/maintainability/java/mi-halstead-java
 	$(DOCKER_RUN_METRIC) mi-halstead-java:latest
 
-collect-static-warnings-checkstyle:
-	$(DOCKER_BUILD_METRIC) -t static-warnings-checkstyle:latest metrics/quality/java/static-warnings-checkstyle
-	$(DOCKER_RUN_METRIC) static-warnings-checkstyle:latest
-
 collect-coverage-jacoco:
 	$(DOCKER_BUILD_METRIC) -t coverage-jacoco:latest metrics/testing/java/coverage-jacoco
 	$(DOCKER_RUN_METRIC) coverage-jacoco:latest
@@ -129,7 +125,7 @@ collect-size-all: collect-loc-cloc collect-loc-tokei collect-loc-scc
 collect-complexity-all: collect-cc-lizard collect-cc-ck
 collect-coupling-all: collect-ce-ca-jdepend collect-ce-ca-ck-cbo
 collect-cohesion-all: collect-lcom-ck collect-lcom-ckjm
-collect-paper-extras: collect-duplication-jscpd collect-mi-halstead-java collect-static-warnings-checkstyle collect-coverage-jacoco collect-churn-git
+collect-paper-extras: collect-duplication-jscpd collect-mi-halstead-java collect-coverage-jacoco
 
 prepare-java-bytecode:
 	python3 -m analysis.prepare_java_bytecode --src-dir $(SRC_DIR) --builder-dir $(JAVA_BUILDER_DIR) $(if $(filter 1,$(JAVA_BUILD_STRICT)),--strict,) $(if $(filter 1,$(JAVA_BUILD_FORCE)),--force,)
@@ -145,6 +141,22 @@ clean-experiment:
 	rm -rf $(RESULTS_DIR) $(RESULTS_NORMALIZED_DIR) $(ANALYSIS_OUT_DIR)
 	mkdir -p $(RESULTS_DIR) $(RESULTS_NORMALIZED_DIR) $(ANALYSIS_OUT_DIR)
 
+print-experiment:
+	@printf "%-35s %-55s %s\n" "DOCKER_IMAGE" "PATH" "METRIC_TYPE"
+	@printf "%-35s %-55s %s\n" "-----------------------------------" "-------------------------------------------------------" "---------------------------"
+	@printf "%-35s %-55s %s\n" "loc-cloc:latest" "metrics/size/generic/loc-cloc" "loc"
+	@printf "%-35s %-55s %s\n" "loc-tokei:latest" "metrics/size/generic/loc-tokei" "loc"
+	@printf "%-35s %-55s %s\n" "loc-scc:latest" "metrics/size/generic/loc-scc" "loc"
+	@printf "%-35s %-55s %s\n" "cc-lizard:latest" "metrics/complexity/generic/cc-lizard" "cc"
+	@printf "%-35s %-55s %s\n" "cc-ck:latest" "metrics/complexity/java/cc-ck" "wmc, nom"
+	@printf "%-35s %-55s %s\n" "ce-ca-jdepend:latest" "metrics/coupling/java/ce-ca-jdepend" "ce-ca"
+	@printf "%-35s %-55s %s\n" "ce-ca-ck-cbo:latest" "metrics/coupling/java/ce-ca-ck-cbo" "ce-ca"
+	@printf "%-35s %-55s %s\n" "lcom-ck:latest" "metrics/cohesion/java/lcom-ck" "lcom"
+	@printf "%-35s %-55s %s\n" "lcom-ckjm:latest" "metrics/cohesion/java/lcom-ckjm" "lcom"
+	@printf "%-35s %-55s %s\n" "duplication-jscpd:latest" "metrics/duplication/java/duplication-jscpd" "duplication-rate"
+	@printf "%-35s %-55s %s\n" "mi-halstead-java:latest" "metrics/maintainability/java/mi-halstead-java" "maintainability-index"
+	@printf "%-35s %-55s %s\n" "coverage-jacoco:latest" "metrics/testing/java/coverage-jacoco" "test-coverage"
+
 print-run-id:
 	@echo "Using METRIC_RUN_ID=$(EXPERIMENT_RUN_ID)"
 	@echo "Metric resource tracking=$(METRIC_RESOURCE_TRACKING) report=$(METRIC_RESOURCE_REPORT)"
@@ -158,7 +170,7 @@ manifest:
 		--out $(RESULTS_DIR)/manifest-$(EXPERIMENT_RUN_ID).json \
 		--primary-component-type file \
 		--language java \
-		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,cc:lizard:lizard-default,wmc:ck:ck-raw,nom:ck:ck-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,lcom:ck:ck-default,lcom:ckjm:ckjm-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,static-warnings:checkstyle:checkstyle-default,test-coverage:jacoco:jacoco-default,code-churn:git:git-default'
+		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,cc:lizard:lizard-default,wmc:ck:ck-raw,nom:ck:ck-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,lcom:ck:ck-default,lcom:ckjm:ckjm-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,test-coverage:jacoco:jacoco-default'
 
 normalize:
 	python3 -m analysis.normalize $(RESULTS_DIR) $(RESULTS_NORMALIZED_DIR)

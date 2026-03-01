@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+import io
 import os
 import re
+import shlex
 import subprocess
+import urllib.error
+import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -16,11 +21,32 @@ BYTECODE_DIR_CANDIDATES = (
 )
 
 DEFAULT_JAVA_VERSION = 21
+DEFAULT_GRADLE_VERSION = "8.10.2"
 
 REPO_VERSION_HINTS = {
     "Java": 21,
     "gson": 21,
     "junit5": 25,
+}
+
+# Fallback used for sparse checkouts where root builds are intentionally incomplete.
+ARTIFACT_BYTECODE_FALLBACKS = {
+    "junit5": [
+        {
+            "module": "junit-jupiter-engine",
+            "group": "org.junit.jupiter",
+            "artifact": "junit-jupiter-engine",
+            "versions": ["6.0.2"],
+        }
+    ],
+    "spring-framework": [
+        {
+            "module": "spring-core",
+            "group": "org.springframework",
+            "artifact": "spring-core",
+            "versions": ["7.0.6", "6.2.7"],
+        }
+    ],
 }
 
 
@@ -31,6 +57,13 @@ class BuildTask:
     build_system: str
     java_version: int
     reason: str
+
+
+@dataclass
+class FallbackOutcome:
+    attempted: bool
+    success: bool
+    message: str
 
 
 def _to_int_version(raw: str) -> Optional[int]:
@@ -71,6 +104,14 @@ def _has_class_files(repo_path: Path) -> bool:
         if not candidate.is_dir():
             continue
         if any(candidate.rglob("*.class")):
+            return True
+    return False
+
+
+def _has_java_sources(module_path: Path) -> bool:
+    for rel_path in ("src/main/java", "main/java"):
+        source_root = module_path / rel_path
+        if source_root.is_dir() and any(source_root.rglob("*.java")):
             return True
     return False
 
@@ -166,11 +207,45 @@ def _build_command(task: BuildTask) -> str:
             "compile"
         )
 
-    gradle_bin = "./gradlew" if (task.path / "gradlew").is_file() else "gradle"
+    gradlew_path = task.path / "gradlew"
+    wrapper_jar_path = task.path / "gradle" / "wrapper" / "gradle-wrapper.jar"
+    wrapper_properties_path = task.path / "gradle" / "wrapper" / "gradle-wrapper.properties"
+
+    gradle_bin = "gradle"
+    gradle_bootstrap = ""
+    if gradlew_path.is_file() and wrapper_jar_path.is_file():
+        gradle_bin = "./gradlew"
+    else:
+        dist_url = None
+        if wrapper_properties_path.is_file():
+            try:
+                for raw in wrapper_properties_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if line.startswith("distributionUrl="):
+                        dist_url = line.split("=", 1)[1].strip().replace("\\:", ":").replace("\\=", "=")
+                        break
+            except OSError:
+                dist_url = None
+        if not dist_url:
+            dist_url = f"https://services.gradle.org/distributions/gradle-{DEFAULT_GRADLE_VERSION}-bin.zip"
+
+        quoted_url = shlex.quote(dist_url)
+        gradle_bootstrap = (
+            "WRAPPER_DIR=/tmp/gradle-wrapper && "
+            "rm -rf \"$WRAPPER_DIR\" && mkdir -p \"$WRAPPER_DIR\" && "
+            f"curl -fsSL {quoted_url} -o \"$WRAPPER_DIR/gradle.zip\" && "
+            "unzip -q \"$WRAPPER_DIR/gradle.zip\" -d \"$WRAPPER_DIR\" && "
+            "GRADLE_BIN=\"$(find \"$WRAPPER_DIR\" -type f -path '*/bin/gradle' | head -n 1)\" && "
+            "test -n \"$GRADLE_BIN\" && "
+        )
+        gradle_bin = "\"$GRADLE_BIN\""
+
     return (
         f"cd /workspace/{task.repo} && "
         f"chmod +x ./gradlew >/dev/null 2>&1 || true && "
-        f"{gradle_bin} --no-daemon classes -x test"
+        f"{gradle_bootstrap}{gradle_bin} --no-daemon assemble"
     )
 
 
@@ -195,6 +270,87 @@ def _run_build(task: BuildTask, image: str, src_dir: Path) -> subprocess.Complet
         _build_command(task),
     ]
     return _run(docker_cmd)
+
+
+def _artifact_url(group: str, artifact: str, version: str) -> str:
+    return (
+        "https://repo1.maven.org/maven2/"
+        f"{group.replace('.', '/')}/{artifact}/{version}/{artifact}-{version}.jar"
+    )
+
+
+def _download_jar(url: str) -> bytes:
+    with urllib.request.urlopen(url, timeout=120) as response:
+        return response.read()
+
+
+def _extract_class_files(jar_data: bytes, target_dir: Path) -> int:
+    count = 0
+    target_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(io.BytesIO(jar_data)) as archive:
+        for member in archive.infolist():
+            if member.is_dir() or not member.filename.endswith(".class"):
+                continue
+            destination = target_dir / member.filename
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member, "r") as source, destination.open("wb") as out:
+                out.write(source.read())
+            count += 1
+    return count
+
+
+def _artifact_bytecode_fallback(task: BuildTask) -> FallbackOutcome:
+    specs = ARTIFACT_BYTECODE_FALLBACKS.get(task.repo)
+    if not specs:
+        return FallbackOutcome(attempted=False, success=False, message="")
+
+    attempted = False
+    details: List[str] = []
+    for spec in specs:
+        module = task.path / spec["module"]
+        if not module.is_dir() or not _has_java_sources(module):
+            continue
+        attempted = True
+        if _has_class_files(module):
+            details.append(f"{spec['module']} already has class files")
+            continue
+
+        downloaded = False
+        for version in spec["versions"]:
+            url = _artifact_url(spec["group"], spec["artifact"], version)
+            try:
+                jar_data = _download_jar(url)
+            except urllib.error.HTTPError:
+                continue
+            except Exception as exc:  # pragma: no cover - network and system dependent
+                return FallbackOutcome(
+                    attempted=True,
+                    success=False,
+                    message=f"{spec['module']}: download failed for {url}: {exc}",
+                )
+
+            extracted = _extract_class_files(jar_data, module / "target" / "classes")
+            if extracted <= 0:
+                return FallbackOutcome(
+                    attempted=True,
+                    success=False,
+                    message=f"{spec['module']}: artifact {url} contained no class files",
+                )
+            details.append(f"{spec['module']}<= {spec['group']}:{spec['artifact']}:{version} ({extracted} classes)")
+            downloaded = True
+            break
+
+        if not downloaded:
+            versions = ", ".join(spec["versions"])
+            return FallbackOutcome(
+                attempted=True,
+                success=False,
+                message=f"{spec['module']}: no downloadable artifact for versions [{versions}]",
+            )
+
+    if attempted:
+        return FallbackOutcome(attempted=True, success=True, message="; ".join(details))
+    return FallbackOutcome(attempted=False, success=False, message="")
 
 
 def _discover_tasks(src_dir: Path, default_java: int, repos_filter: List[str], force: bool) -> List[BuildTask]:
@@ -280,6 +436,19 @@ def main() -> int:
         completed = _run_build(task, image=image, src_dir=src_dir)
         if completed.returncode == 0:
             print(f"[ok] {task.repo}")
+            continue
+
+        fallback = _artifact_bytecode_fallback(task)
+        if fallback.attempted and fallback.success:
+            print(f"[ok] {task.repo} (artifact-fallback: {fallback.message})")
+            continue
+        if fallback.attempted and not fallback.success:
+            failures.append(
+                f"{task.repo}: artifact fallback failed: {fallback.message}\n"
+                f"build stdout:\n{completed.stdout}\n"
+                f"build stderr:\n{completed.stderr}"
+            )
+            print(f"[fail] {task.repo} exit={completed.returncode}")
             continue
 
         failures.append(

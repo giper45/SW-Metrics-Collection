@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
  
+## [0.3] - 2026-03-01
+
+### Added
+- `make print-experiment` now prints Docker image tag, metric path, and metric type for the experiment set.
+- Regression tests for bytecode discovery filtering (`tests/unit/test_input_manager.py`).
+
+### Changed
+- `JAVA_BUILD_BYTECODE` is enabled by default in `Makefile`.
+- `make experiment` no longer includes `code-churn` in `collect-paper-extras` and in manifest expected metrics.
+- Java bytecode preparation now includes sparse-checkout artifact fallback for `junit5:junit-jupiter-engine` and `spring-framework:spring-core`.
+
+### Fixed
+- CKJM bytecode input discovery now excludes non-`.class` files (e.g. `META-INF/LICENSE`) to prevent collector crashes.
+- Bytecode preparation fallback reporting now correctly marks modules with existing class files as successful.
+
 ## [0.2] - 2026-03-01
 The first release of the project.
  
