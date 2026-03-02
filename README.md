@@ -116,7 +116,8 @@ JAVA_BUILD_BYTECODE=1 make experiment
 ```
 
 The bytecode phase uses versioned `java-builder` Docker images and compiles repositories in `src/`
-before collection. Useful flags:
+before collection. The orchestration step (`analysis.prepare_java_bytecode`) also runs in a dedicated
+Docker container for reproducibility and invokes Docker via the host socket. Useful flags:
 
 ```bash
 JAVA_BUILD_BYTECODE=1 JAVA_BUILD_STRICT=1 make experiment
