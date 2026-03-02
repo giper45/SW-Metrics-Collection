@@ -26,6 +26,7 @@ DEFAULT_GRADLE_VERSION = "8.10.2"
 REPO_VERSION_HINTS = {
     "Java": 21,
     "gson": 21,
+    "guava": 21,
     "junit5": 25,
 }
 
@@ -289,16 +290,20 @@ def _build_command(task: BuildTask) -> str:
             return (
                 f"cd /workspace/{task.repo} && "
                 f"chmod +x ./mvnw >/dev/null 2>&1 || true && "
+                "export JDK_JAVAC_OPTIONS='-XDaddTypeAnnotationsToSymbol=true' && "
                 f"{_maven_cmd('-pl', 'guava', '-am', 'compile')} && "
                 f"{_maven_cmd('-pl', 'guava-testlib,guava-tests,guava-gwt', '-am', 'compiler:compile@default-compile')} && "
                 f"cd /workspace/{task.repo}/android && "
                 f"../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} -pl guava,guava-testlib,guava-tests -am compile && "
-                f"cd /workspace/{task.repo}/futures/failureaccess && "
-                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} compile && "
-                f"cd /workspace/{task.repo}/futures/listenablefuture1 && "
-                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} compile && "
-                f"cd /workspace/{task.repo}/futures/listenablefuture9999 && "
-                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} compile"
+                f"(cd /workspace/{task.repo}/futures/failureaccess && "
+                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} "
+                "-Dmaven.compiler.release=8 -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 compile || true) && "
+                f"(cd /workspace/{task.repo}/futures/listenablefuture1 && "
+                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} "
+                "-Dmaven.compiler.release=8 -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 compile || true) && "
+                f"(cd /workspace/{task.repo}/futures/listenablefuture9999 && "
+                f"../../mvnw --batch-mode -q {MAVEN_COMMON_FLAGS} "
+                "-Dmaven.compiler.release=8 -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 compile || true)"
             )
 
         return (
