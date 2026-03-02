@@ -1,0 +1,9 @@
+run_id,metric,component_type,tool_a,variant_a,tool_b,variant_b,n_common,spearman_rho,notes
+8a6d4c8b-2e87-4462-9f2e-7221372772ae,ca,module,ck,ck-ce-ca-proxy,jdepend,jdepend-default,45,0.705518,
+8a6d4c8b-2e87-4462-9f2e-7221372772ae,cc,module,ck,ck-normalized,lizard,lizard-default,45,0.976434,
+8a6d4c8b-2e87-4462-9f2e-7221372772ae,ce,module,ck,ck-ce-ca-proxy,jdepend,jdepend-default,45,0.597101,
+8a6d4c8b-2e87-4462-9f2e-7221372772ae,instability,module,ck,ck-ce-ca-proxy-derived,jdepend,jdepend-default-derived,45,0.461949,
+8a6d4c8b-2e87-4462-9f2e-7221372772ae,lcom,module,ck,ck-default,ckjm,ckjm-default,45,0.634387,
+8a6d4c8b-2e87-4462-9f2e-7221372772ae,loc,file,cloc,cloc-default,scc,scc-default,10129,0.997707,
+8a6d4c8b-2e87-4462-9f2e-7221372772ae,loc,file,cloc,cloc-default,tokei,tokei-default,10129,0.965262,
+8a6d4c8b-2e87-4462-9f2e-7221372772ae,loc,file,scc,scc-default,tokei,tokei-default,10129,0.962613,
