@@ -4,8 +4,9 @@ import csv
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
+import math
 
-from analysis.utils import pearson, safe_float
+from analysis.utils import pearson, safe_float, spearman_rho
 
 REQUIRED_LONG_COLUMNS = (
     "project",
