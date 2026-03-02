@@ -7,6 +7,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
+from analysis.utils import safe_float
+
 REQUIRED_FIELDS = (
     "schema_version",
     "run_id",
@@ -44,26 +46,6 @@ WIDE_INDEX_COLUMNS = [
     "component",
     "component_type",
 ]
-
-
-def _safe_float(value):
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        numeric = float(value)
-    elif isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            numeric = float(text)
-        except ValueError:
-            return None
-    else:
-        return None
-    if not math.isfinite(numeric):
-        return None
-    return numeric
 
 
 def _canonical_metric(row: Dict) -> str:
@@ -115,7 +97,7 @@ def _validate_row(row: Dict, source: str) -> None:
 
     value = row.get("value")
     if status == "ok":
-        numeric = _safe_float(value)
+        numeric = safe_float(value)
         if numeric is None:
             raise ValueError(f"{source}: value must be finite number when status=ok")
     else:

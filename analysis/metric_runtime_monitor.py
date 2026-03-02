@@ -11,6 +11,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Sequence, Tuple
 
+from analysis.utils import utc_timestamp_now
+
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off", ""}
@@ -29,10 +31,6 @@ SIZE_FACTORS = {
     "TIB": 1024 ** 4,
     "PIB": 1024 ** 5,
 }
-
-
-def utc_timestamp_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def parse_bool(raw: Optional[str], default: bool = False) -> bool:

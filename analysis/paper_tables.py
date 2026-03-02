@@ -6,6 +6,8 @@ from pathlib import Path
 from statistics import median
 from typing import Dict, Iterable, List, Tuple
 
+from analysis.utils import safe_float, safe_int
+
 
 PAIR_COLUMNS = [
     "run_id",
@@ -32,32 +34,6 @@ SUMMARY_COLUMNS = [
 ]
 
 
-def _safe_float(value):
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        numeric = float(value)
-    elif isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            numeric = float(text)
-        except ValueError:
-            return None
-    else:
-        return None
-    if not math.isfinite(numeric):
-        return None
-    return numeric
-
-
-def _safe_int(value):
-    numeric = _safe_float(value)
-    if numeric is None:
-        return None
-    return int(numeric)
-
 
 def _read_agreement_rows(path: Path) -> List[Dict]:
     with path.open("r", encoding="utf-8", newline="") as handle:
@@ -83,8 +59,8 @@ def _intertool_valid_rows(rows: Iterable[Dict], min_common: int = 2) -> List[Dic
     out: List[Dict] = []
     for row in rows:
         notes = str(row.get("notes", "")).strip()
-        rho = _safe_float(row.get("spearman_rho"))
-        n_common = _safe_int(row.get("n_common"))
+        rho = safe_float(row.get("spearman_rho"))
+        n_common = safe_int(row.get("n_common"))
         tool_a = str(row.get("tool_a", "")).strip()
         tool_b = str(row.get("tool_b", "")).strip()
         if notes:

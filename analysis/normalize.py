@@ -4,9 +4,10 @@ import json
 import math
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
+
+from analysis.utils import utc_timestamp_now
 
 
 SCHEMA_VERSION = "1.0"
@@ -30,10 +31,6 @@ CANONICAL_KEYS = [
     "source_variant",
     "source_file",
 ]
-
-
-def utc_timestamp_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _safe_float(value) -> Optional[float]:

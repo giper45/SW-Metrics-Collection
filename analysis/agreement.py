@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import csv
-import math
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
+
+from analysis.utils import pearson, safe_float
 
 REQUIRED_LONG_COLUMNS = (
     "project",
@@ -33,65 +34,10 @@ AGREEMENT_COLUMNS = [
 ]
 
 
-def _safe_float(value):
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        numeric = float(value)
-    elif isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            numeric = float(text)
-        except ValueError:
-            return None
-    else:
-        return None
-    if not math.isfinite(numeric):
-        return None
-    return numeric
 
 
-def _mean(values: Iterable[float]) -> float:
-    values = list(values)
-    return sum(values) / len(values) if values else 0.0
 
 
-def _pearson(x: List[float], y: List[float]) -> float:
-    if len(x) != len(y) or len(x) < 2:
-        return 0.0
-    mx = _mean(x)
-    my = _mean(y)
-    dx = [val - mx for val in x]
-    dy = [val - my for val in y]
-    num = sum(a * b for a, b in zip(dx, dy))
-    den_x = math.sqrt(sum(a * a for a in dx))
-    den_y = math.sqrt(sum(b * b for b in dy))
-    if den_x == 0.0 or den_y == 0.0:
-        return 0.0
-    return num / (den_x * den_y)
-
-
-def _rankdata(values: List[float]) -> List[float]:
-    indexed = sorted((val, idx) for idx, val in enumerate(values))
-    ranks = [0.0] * len(values)
-    i = 0
-    while i < len(indexed):
-        j = i
-        while j + 1 < len(indexed) and indexed[j + 1][0] == indexed[i][0]:
-            j += 1
-        avg_rank = (i + j + 2) / 2.0
-        for k in range(i, j + 1):
-            ranks[indexed[k][1]] = avg_rank
-        i = j + 1
-    return ranks
-
-
-def spearman_rho(x: List[float], y: List[float]) -> float:
-    if len(x) != len(y) or len(x) < 2:
-        return 0.0
-    return _pearson(_rankdata(x), _rankdata(y))
 
 
 def read_long_csv(path: Path) -> List[Dict]:
@@ -104,7 +50,7 @@ def read_long_csv(path: Path) -> List[Dict]:
 
         rows = []
         for line_no, row in enumerate(reader, start=2):
-            value = _safe_float(row.get("value"))
+            value = safe_float(row.get("value"))
             if value is None:
                 raise ValueError(f"{path}:{line_no}: invalid numeric value")
             normalized = dict(row)
