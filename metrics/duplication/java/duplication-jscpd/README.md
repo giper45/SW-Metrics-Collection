@@ -19,7 +19,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-duplication-rate-jscpd-default.jsonl`
+`/results/software-metrics/jsonl/<project>-<timestamp>-duplication-rate-jscpd-default.jsonl`
 
 ## Notes
 

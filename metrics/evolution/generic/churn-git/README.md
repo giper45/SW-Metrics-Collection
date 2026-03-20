@@ -28,7 +28,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-code-churn-git-default.jsonl`
+`/results/software-metrics/jsonl/<project>-<timestamp>-code-churn-git-default.jsonl`
 
 ## Notes
 

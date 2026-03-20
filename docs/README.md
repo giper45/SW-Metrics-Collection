@@ -1,6 +1,6 @@
 # Docs & Diagrams
 
-This folder contains proposed architectural documentation for **SW Metrics Collection**, with **PlantUML** diagrams.
+This folder contains proposed architectural documentation for **MAVIS (Metric And Vulnerability Integrated Suite)**, with **PlantUML** diagrams.
 
 ## Suggested structure
 

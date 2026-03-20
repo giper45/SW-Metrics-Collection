@@ -19,7 +19,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-ce-ca-ck-ck-ce-ca-proxy.jsonl`
+`/results/software-metrics/jsonl/<project>-<timestamp>-ce-ca-ck-ck-ce-ca-proxy.jsonl`
 
 Timestamp format is UTC ISO8601 with seconds (for example `2026-02-24T15:04:05Z`).
 

@@ -28,7 +28,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-loc-tokei-default.jsonl`
+`/results/software-metrics/jsonl/<project>-<timestamp>-loc-tokei-default.jsonl`
 
 Timestamp format is UTC ISO8601 with seconds (for example `2026-02-24T15:04:05Z`).
 

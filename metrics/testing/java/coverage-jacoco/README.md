@@ -19,7 +19,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-test-coverage-jacoco-default.jsonl`
+`/results/software-metrics/jsonl/<project>-<timestamp>-test-coverage-jacoco-default.jsonl`
 
 ## Notes
 

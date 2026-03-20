@@ -1,12 +1,16 @@
-# SW Metrics Collection
+# MAVIS (Metric And Vulnerability Integrated Suite)
 
-Container-based scaffold for software metric experiments, focused on Java projects.
+MAVIS (Metric And Vulnerability Integrated Suite) is a microservices-based architecture for unified and normalized software metric collection, focused on Java projects.
+
+Public repository: [https://github.com/giper45/SW-Metrics-Collection](https://github.com/giper45/SW-Metrics-Collection)
 
 ## Metric Matrix
 
 | Category | Metric | Tool / Variant |
 |---|---|---|
 | Size | LOC | `loc-cloc`, `loc-tokei`, `loc-scc` |
+| Size | Class count | `class-count-javaparser` |
+| Size | Package count | `package-count-javaparser` |
 | Complexity | CC | `cc-lizard`, `cc-ck` (collector uses CK `wmc/nom`, normalized downstream) |
 | Coupling | Ce/Ca | `ce-ca-jdepend`, `ce-ca-ck-cbo` (CK proxy) |
 | Instability | I | derived in normalization from `ce-ca` (`*-derived`) |
@@ -15,13 +19,21 @@ Container-based scaffold for software metric experiments, focused on Java projec
 | Maintainability | Maintainability Index (+ Halstead aggregates) | `mi-halstead-java` |
 | Quality | Static warnings | `static-warnings-checkstyle` |
 | Testing | Coverage ratio | `coverage-jacoco` |
+| Vulnerability | Vulnerability findings | `vulnerability-spotbugs-findsecbugs`, `vulnerability-dependency-check`, `vulnerability-codeql-java`, `vulnerability-pmd-security` |
 | Evolution | Code churn | `churn-git` |
 
-Implemented metric containers: **14**.
+Implemented metric containers: **19**.
+
+For vulnerability collectors, the raw interchange contract is **SARIF 2.1.0**.
+Scanners that already support SARIF emit it natively; scanners with non-SARIF native
+formats are adapted to SARIF before entering the shared normalization pipeline.
+The canonical pipeline output remains JSONL, while secondary SARIF artifacts are persisted under
+`results/vulnerabilities/artifacts/sarif/raw/` and `results/vulnerabilities/artifacts/sarif/normalized/`.
 
 ## Repository Structure
 
 - `metrics/size/generic/`
+- `metrics/size/java/`
 - `metrics/complexity/generic/`, `metrics/complexity/java/`, `metrics/complexity/python/`
 - `metrics/coupling/java/`
 - `metrics/cohesion/java/`
@@ -29,6 +41,7 @@ Implemented metric containers: **14**.
 - `metrics/maintainability/java/`
 - `metrics/quality/java/`
 - `metrics/testing/java/`
+- `metrics/vulnerability/java/`
 - `metrics/evolution/generic/`
 - `metrics/validate-results/generic/jsonl-schema-validator/`
 - `metrics/generic/normalized-collector/`
@@ -40,10 +53,66 @@ Implemented metric containers: **14**.
 - Docker running (`docker version`)
 - Python 3.11+
 - `pytest`
+- Flask for the local control panel
 
 ```bash
-python3 -m pip install pytest
+python3 -m pip install pytest -r webapp/requirements.txt
 ```
+
+## Web Control Panel
+
+The repository now includes a Flask web UI that discovers runnable targets directly from `Makefile`
+and lets you queue them from the browser. It also exposes repository management actions for:
+
+- batch cloning from Git URLs with an optional tag or branch
+- batch `.zip` uploads into `src/`
+- cleaning the repository folders under `src/`
+
+Authentication is local and session-based:
+
+- username: `swadmin`
+- password: value of the `ENV_PWD` environment variable
+
+Start it locally on `localhost:9999`:
+
+```bash
+export ENV_PWD='choose-a-strong-password'
+python3 -m webapp
+```
+
+For development with hot reload:
+
+```bash
+export ENV_PWD='choose-a-strong-password'
+bash webapp/run.sh
+```
+
+Optional advanced runs can pass Make variables such as:
+
+```text
+JAVA_BUILD_BYTECODE=1
+METRIC_RESOURCE_TRACKING=1
+```
+
+## Dockerized Web UI
+
+Build the image:
+
+```bash
+docker build -t mavis-control-panel .
+```
+
+Run it with Docker-in-Docker enabled:
+
+```bash
+docker run --privileged --rm \
+  -p 9999:9999 \
+  -e ENV_PWD='choose-a-strong-password' \
+  -v "$PWD:/workspace" \
+  mavis-control-panel
+```
+
+Open [http://localhost:9999](http://localhost:9999).
 
 ## Quick Start (Java)
 
@@ -66,8 +135,22 @@ make collect-duplication-jscpd
 make collect-mi-halstead-java
 make collect-static-warnings-checkstyle
 make collect-coverage-jacoco
+make collect-vulnerability-dependency-check
+make collect-vulnerability-codeql-java
+make collect-vulnerability-pmd-security
+make collect-vulnerability-spotbugs-findsecbugs
+make normalize-vulnerability-sarif
 make collect-churn-git
 ```
+
+Note: `collect-vulnerability-codeql-java` is forced to `linux/amd64` because the official
+CodeQL Linux bundle is currently distributed as `linux64` only.
+The container defaults to conservative CodeQL settings (`CODEQL_THREADS=2`, `CODEQL_RAM_MB=4096`)
+to keep analysis stable under emulation; override them if you need different limits.
+For a lighter offline Java SAST pass, `collect-vulnerability-pmd-security` uses PMD's
+built-in `category/java/security.xml` ruleset.
+`make normalize-vulnerability-sarif` creates canonical normalized SARIF only for missing
+vulnerability artifacts, reusing raw SARIF when available and falling back to embedded JSONL findings otherwise.
 
 4. Validate outputs:
 
@@ -75,9 +158,15 @@ make collect-churn-git
 make validate-results
 ```
 
-## One-Command Experiment Pipeline
+## One-Command Case Study Pipeline
 
 Run full collection + manifest + normalization + dataset build + agreement + report generation:
+
+```bash
+make case-study
+```
+
+Legacy alias (still supported):
 
 ```bash
 make experiment
@@ -97,7 +186,7 @@ make report
 Optional runtime telemetry with `make` (disabled by default):
 
 ```bash
-METRIC_RESOURCE_TRACKING=1 make experiment
+METRIC_RESOURCE_TRACKING=1 make case-study
 ```
 
 Optional tuning:
@@ -106,13 +195,13 @@ Optional tuning:
 METRIC_RESOURCE_TRACKING=1 \
 METRIC_RESOURCE_SAMPLE_SEC=0.25 \
 METRIC_RESOURCE_REPORT=analysis_out/metric-runtime-custom.jsonl \
-make experiment
+make case-study
 ```
 
 Optional Java bytecode preparation (recommended for bytecode-based metrics, e.g. `lcom-ckjm`):
 
 ```bash
-JAVA_BUILD_BYTECODE=1 make experiment
+JAVA_BUILD_BYTECODE=1 make case-study
 ```
 
 The bytecode phase uses versioned `java-builder` Docker images and compiles repositories in `src/`
@@ -120,11 +209,11 @@ before collection. The orchestration step (`analysis.prepare_java_bytecode`) als
 Docker container for reproducibility and invokes Docker via the host socket. Useful flags:
 
 ```bash
-JAVA_BUILD_BYTECODE=1 JAVA_BUILD_STRICT=1 make experiment
-JAVA_BUILD_BYTECODE=1 JAVA_BUILD_FORCE=1 make experiment
+JAVA_BUILD_BYTECODE=1 JAVA_BUILD_STRICT=1 make case-study
+JAVA_BUILD_BYTECODE=1 JAVA_BUILD_FORCE=1 make case-study
 ```
 
-- `JAVA_BUILD_STRICT=1`: fail experiment if any repository build fails.
+- `JAVA_BUILD_STRICT=1`: fail case study run if any repository build fails.
 - `JAVA_BUILD_FORCE=1`: rebuild even if `.class` files already exist.
 
 You can also run only the build phase:
@@ -140,7 +229,7 @@ When enabled, one JSONL row per metric container run is appended to:
 Each row includes start/end timestamps, duration, sampled CPU (%), peak RAM (bytes), container image, and exit status.
 Telemetry JSONL files named `metric-runtime-*.jsonl` are excluded from normalization/dataset/manifest inputs.
 
-`run_experiment.sh` enables runtime telemetry by default (`METRIC_RESOURCE_TRACKING=1`), and you can override:
+`run_experiment.sh` (legacy script name) enables runtime telemetry by default (`METRIC_RESOURCE_TRACKING=1`), and you can override:
 
 ```bash
 METRIC_RESOURCE_TRACKING=0 bash run_experiment.sh
@@ -148,12 +237,21 @@ METRIC_RESOURCE_TRACKING=0 bash run_experiment.sh
 
 Output folders:
 
-- `results/` raw JSONL from metric containers
+- `results/` raw collector outputs with category-specific subfolders
+  - `results/software-metrics/jsonl/`
+  - `results/software-metrics/artifacts/`
+  - `results/vulnerabilities/jsonl/`
+  - `results/vulnerabilities/artifacts/sarif/raw/`
+  - `results/vulnerabilities/artifacts/sarif/normalized/`
   - `results/manifest-<run_id>.json`
 - `results_normalized/` JSONL after semantic normalization (`analysis/normalize.py`)
+  - `results_normalized/software-metrics/jsonl/`
+  - `results_normalized/vulnerabilities/jsonl/`
 - `analysis_out/` tabular datasets and agreement outputs
   - `analysis_out/repo_report.csv`
   - `analysis_out/repo_report.json`
+  - `analysis_out/structure_inventory.csv`
+  - `analysis_out/structure_inventory.json`
   - `analysis_out/dataset_wide_<component_type>.csv`
 
 Agreement scope (`analysis/agreement.py`):
@@ -164,9 +262,21 @@ Agreement scope (`analysis/agreement.py`):
 - default `min_common=2` (`--min-common` to override)
 - when `n_common<2`, `spearman_rho` is null-equivalent (blank in CSV export) and `notes=n_common<2`
 
+Structural inventory summary:
+
+```bash
+make compute-structure-inventory
+```
+
+This command aggregates:
+
+- repository LOC from file-level `loc-cloc` results
+- repository `class-count` from `class-count-javaparser`
+- repository `package-count` from `package-count-javaparser`
+
 ## Single Repository Workflow
 
-Use this when you want to analyze exactly one repository end-to-end.
+Use this when you want to run a single-repository case study end-to-end.
 
 1. Keep only one repository under `src/`:
 
@@ -184,7 +294,7 @@ git clone --depth 1 https://github.com/TheAlgorithms/Java src/thealgorithms-java
 3. Run the full pipeline:
 
 ```bash
-make experiment
+make case-study
 ```
 
 4. (Optional) Validate raw JSONL schema:
@@ -196,8 +306,8 @@ make validate-results
 5. Inspect outputs:
 
 ```bash
-ls -1 results | head
-ls -1 results_normalized | head
+find results -maxdepth 3 -type f | head
+find results_normalized -maxdepth 3 -type f | head
 ls -1 analysis_out
 ```
 
@@ -211,7 +321,7 @@ Notes:
 
 - Inter-tool agreement is computed **within the same metric** only.
 - If `src/` contains multiple repos, all of them are processed.
-- Java experiment profile excludes non-Java metrics from `collect-all` (for example `cc-radon`).
+- Java case-study profile excludes non-Java metrics from `collect-all` (for example `cc-radon`).
 
 ## Java Example (TheAlgorithms/Java)
 
@@ -225,28 +335,33 @@ make validate-results
 
 Expected files in `results/` include:
 
-- `thealgorithms-java-<timestamp>-loc-cloc-cloc-default.jsonl`
-- `thealgorithms-java-<timestamp>-cc-lizard-lizard-default.jsonl`
-- `thealgorithms-java-<timestamp>-wmc-ck-ck-raw.jsonl`
-- `thealgorithms-java-<timestamp>-ce-ca-jdepend-jdepend-default.jsonl`
-- `thealgorithms-java-<timestamp>-ce-ca-ck-ck-ce-ca-proxy.jsonl`
-- `thealgorithms-java-<timestamp>-lcom-ck-ck-default.jsonl`
-- `thealgorithms-java-<timestamp>-lcom-ckjm-ckjm-default.jsonl`
-- `thealgorithms-java-<timestamp>-duplication-rate-jscpd-jscpd-default.jsonl`
-- `thealgorithms-java-<timestamp>-maintainability-index-java-halstead-analyzer-mi-halstead-default.jsonl`
-- `thealgorithms-java-<timestamp>-static-warnings-checkstyle-checkstyle-default.jsonl`
-- `thealgorithms-java-<timestamp>-test-coverage-jacoco-jacoco-default.jsonl`
-- `thealgorithms-java-<timestamp>-code-churn-git-git-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-loc-cloc-cloc-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-cc-lizard-lizard-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-wmc-ck-ck-raw.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-ce-ca-jdepend-jdepend-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-ce-ca-ck-ck-ce-ca-proxy.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-lcom-ck-ck-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-lcom-ckjm-ckjm-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-duplication-rate-jscpd-jscpd-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-maintainability-index-java-halstead-analyzer-mi-halstead-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-static-warnings-checkstyle-checkstyle-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-test-coverage-jacoco-jacoco-default.jsonl`
+- `software-metrics/jsonl/thealgorithms-java-<timestamp>-code-churn-git-git-default.jsonl`
 
 Timestamp format: UTC ISO8601 with seconds, example `2026-02-24T15:04:05Z`.
 
 ## Unified JSONL Output Format
 
-Every metric container writes JSON Lines:
+Each metric is computed independently by a dedicated container. A uniform output contract then requires every container to emit the same JSON Lines structure:
 
 Path pattern:
 
-- `/results/<project>-<timestamp>-<metric>-<tool>-<variant>.jsonl`
+- `/results/<category>/jsonl/<project>-<timestamp>-<metric>-<tool>-<variant>.jsonl`
+
+Category mapping:
+
+- software metrics: `/results/software-metrics/jsonl/...`
+- vulnerability metrics: `/results/vulnerabilities/jsonl/...`
 
 Row schema:
 
@@ -330,21 +445,27 @@ The integration suite validates:
 - validator container execution
 
 
-## Run experiment
-To run the full experiment pipeline (collection + manifest + normalization + dataset build + agreement):
+## Run case study
+To run the full case-study pipeline (collection + manifest + normalization + dataset build + agreement + report):
 
 1. Download repositories using the `init_repositories.sh` script:   
 
 ```bash
 bash init_repositories.sh
 ```
-2. Run the experiment:
+2. Run the case study:
 
 ```bash 
 bash run_experiment.sh
 ```
 
-`run_experiment.sh` defaults:
+Equivalent direct command:
+
+```bash
+make case-study
+```
+
+`run_experiment.sh` defaults (legacy script name; it runs the case-study target):
 
 - generates a new `METRIC_RUN_ID`
 - enables resource tracking (`METRIC_RESOURCE_TRACKING=1`)

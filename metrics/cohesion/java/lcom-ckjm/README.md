@@ -28,7 +28,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-lcom-ckjm-ckjm-default.jsonl`
+`/results/software-metrics/jsonl/<project>-<timestamp>-lcom-ckjm-ckjm-default.jsonl`
 
 Timestamp format is UTC ISO8601 with seconds (for example `2026-02-24T15:04:05Z`).
 
@@ -68,4 +68,5 @@ Each line in the output file is one JSON object:
   - `build/classes/java/main`
   - `build/classes/kotlin/main`
   - `build/classes`
+  - `build/WEB-INF/classes`
   - `out/production`

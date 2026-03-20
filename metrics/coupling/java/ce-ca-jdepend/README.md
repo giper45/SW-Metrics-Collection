@@ -19,7 +19,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-ce-ca-jdepend-default.jsonl`
+`/results/software-metrics/jsonl/<project>-<timestamp>-ce-ca-jdepend-default.jsonl`
 
 Timestamp format is UTC ISO8601 with seconds (for example `2026-02-24T15:04:05Z`).
 
@@ -53,6 +53,6 @@ Each line in the output file is one JSON object:
 
 - Emits two rows per module: one with parameters.dimension=ce and one with parameters.dimension=ca.
 - value is aggregated package coupling for that dimension.
-- Bytecode-first: JDepend runs on compiled classes from common build folders (`target/classes`, `build/classes/...`, `out/production`).
+- Bytecode-first: JDepend runs on compiled classes from common build folders (`target/classes`, `build/classes/...`, `build/WEB-INF/classes`, `out/production`).
 - If bytecode is missing for a module that has Java sources, rows are emitted as `status=skipped` with `skip_reason` (no source-based fallback is used).
 - `Ce` may include dependencies toward external packages (for example `java.lang`) when reported by JDepend.

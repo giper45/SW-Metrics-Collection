@@ -386,7 +386,11 @@ def run_container_case(case, results_dir, dynamic_churn_fixture):
         ]
     )
 
-    files = sorted(results_dir.glob(f"*-{case['metric']}-{case['variant']}.jsonl"))
+    files = sorted(
+        path
+        for path in results_dir.rglob("*.jsonl")
+        if f"-{case['metric']}-" in path.name and path.name.endswith(f"-{case['variant']}.jsonl")
+    )
     if not files:
         raise AssertionError(f"no output file produced for {case['name']}")
 

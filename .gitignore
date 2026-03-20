@@ -37,3 +37,10 @@ results_normalized_filtered2/**
 
 
 analysis_out
+
+.bkp
+
+.webapp_uploads/
+
+
+src-collector

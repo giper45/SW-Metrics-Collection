@@ -18,7 +18,9 @@ def test_build_manifest_tracks_missing_expected_variant(tmp_path: Path):
     run_id = "11111111-1111-4111-8111-111111111111"
     results_dir = tmp_path / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
-    (results_dir / "sample.jsonl").write_text(
+    nested_path = results_dir / "software-metrics" / "jsonl" / "sample.jsonl"
+    nested_path.parent.mkdir(parents=True, exist_ok=True)
+    nested_path.write_text(
         (
             '{"schema_version":"1.0","run_id":"11111111-1111-4111-8111-111111111111","project":"repo-a","metric":"loc","variant":"cloc-default","component_type":"file","component":"src/A.java","status":"ok","value":10.0,"tool":"cloc","tool_version":"1.0","parameters":{"repo_commit":"abc","repo_dirty":false},"timestamp_utc":"2026-02-24T15:04:05Z"}\n'
             '{"schema_version":"1.0","run_id":"11111111-1111-4111-8111-111111111111","project":"repo-a","metric":"loc","variant":"tokei-default","component_type":"file","component":"src/A.java","status":"ok","value":12.0,"tool":"tokei","tool_version":"1.0","parameters":{"repo_commit":"abc","repo_dirty":false},"timestamp_utc":"2026-02-24T15:04:05Z"}\n'
@@ -44,6 +46,7 @@ def test_build_manifest_tracks_missing_expected_variant(tmp_path: Path):
     assert manifest["component_type_primary"] == "file"
     assert manifest["status"] == "partial"
     assert "loc|scc|scc-default" in manifest["missing_variants"]
+    assert manifest["outputs"][0]["file"] == "software-metrics/jsonl/sample.jsonl"
 
 
 def test_build_manifest_ignores_runtime_telemetry_jsonl(tmp_path: Path):

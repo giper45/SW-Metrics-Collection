@@ -28,7 +28,7 @@ docker run --rm \
 
 ## Output file pattern
 
-`/results/<project>-<timestamp>-maintainability-index-mi-halstead-default.jsonl`
+`/results/software-metrics/jsonl/<project>-<timestamp>-maintainability-index-mi-halstead-default.jsonl`
 
 ## Notes
 
