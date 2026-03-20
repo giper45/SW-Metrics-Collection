@@ -17,6 +17,7 @@ BYTECODE_DIR_CANDIDATES = (
     "build/classes/java/main",
     "build/classes/kotlin/main",
     "build/classes",
+    "build/WEB-INF/classes",
     "out/production",
 )
 
@@ -25,6 +26,7 @@ DEFAULT_GRADLE_VERSION = "8.10.2"
 
 REPO_VERSION_HINTS = {
     "Java": 21,
+    "bodgeit": 8,
     "gson": 21,
     "guava": 21,
     "junit5": 25,
@@ -127,6 +129,7 @@ def _extract_versions_from_text(text: str) -> List[int]:
         r"maven\.compiler\.source>\s*([0-9]+(?:\.[0-9]+)?)\s*<",
         r"maven\.compiler\.target>\s*([0-9]+(?:\.[0-9]+)?)\s*<",
         r"<release>\s*([0-9]+)\s*</release>",
+        r"\b(?:source|target|release)\s*=\s*\"([0-9]+(?:\.[0-9]+)?)\"",
         r"JavaLanguageVersion\.of\(\s*([0-9]+)\s*\)",
         r"VERSION_([0-9]+)",
         r"\bJDK\s*([0-9]+(?:\.[0-9]+)?)\b",
@@ -171,6 +174,8 @@ def _detect_build_system(repo_path: Path) -> Optional[str]:
         return "gradle"
     if (repo_path / "mvnw").is_file() or (repo_path / "pom.xml").is_file():
         return "maven"
+    if (repo_path / "build.xml").is_file():
+        return "ant"
     return None
 
 
@@ -180,6 +185,7 @@ def _scan_repo_versions(repo_path: Path) -> List[int]:
         repo_path / "pom.xml",
         repo_path / "build.gradle",
         repo_path / "build.gradle.kts",
+        repo_path / "build.xml",
         repo_path / "gradle.properties",
         repo_path / "README.md",
     ]
@@ -310,6 +316,13 @@ def _build_command(task: BuildTask) -> str:
             f"cd /workspace/{task.repo} && "
             f"chmod +x ./mvnw >/dev/null 2>&1 || true && "
             f"{_maven_cmd('compile')}"
+        )
+
+    if task.build_system == "ant":
+        return (
+            f"cd /workspace/{task.repo} && "
+            "mkdir -p build/WEB-INF/classes && "
+            "ant compile"
         )
 
     if task.repo == "okio":
