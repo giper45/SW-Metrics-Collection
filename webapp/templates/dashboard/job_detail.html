@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Job {{ job.id }} | MAVIS Control Panel{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ job.label }}</h1>
+        <p class="text-body-secondary mb-0">Job id: <code>{{ job.id }}</code></p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
+        <a href="{{ url_for('main.job_list') }}" class="btn btn-outline-secondary">All Jobs</a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Status</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge text-bg-{{ status_classes[job.status] }}">{{ job.status }}</span>
+                    </dd>
+
+                    <dt class="col-sm-4">Created</dt>
+                    <dd class="col-sm-8">{{ job.created_at }}</dd>
+
+                    <dt class="col-sm-4">Started</dt>
+                    <dd class="col-sm-8">{{ job.started_at or "-" }}</dd>
+
+                    <dt class="col-sm-4">Finished</dt>
+                    <dd class="col-sm-8">{{ job.finished_at or "-" }}</dd>
+
+                    <dt class="col-sm-4">Exit code</dt>
+                    <dd class="col-sm-8">{{ job.returncode if job.returncode is not none else "-" }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        {% if job.command %}
+            <div class="card shadow-sm mt-4">
+                <div class="card-header">
+                    <h2 class="h6 mb-0">Command</h2>
+                </div>
+                <div class="card-body">
+                    <code>{{ job.command | join(' ') }}</code>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if job.error %}
+            <div class="alert alert-danger mt-4 mb-0">{{ job.error }}</div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Job Output</h2>
+                {% if refresh_seconds %}
+                    <span class="badge text-bg-info">Auto refresh every {{ refresh_seconds }}s</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <pre class="bg-dark text-light rounded p-3 mb-0" style="min-height: 28rem; white-space: pre-wrap;">{{ job.log or "Waiting for job output..." }}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

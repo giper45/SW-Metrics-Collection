@@ -1,0 +1,729 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | MAVIS Control Panel{% endblock %}
+
+{% block extra_head %}
+<style>
+    .quick-action-button {
+        min-height: 8.5rem;
+    }
+
+    .workflow-step {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 1rem;
+        background: var(--bs-body-bg);
+        min-height: 100%;
+    }
+
+    .workflow-index {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+    }
+
+    .dashboard-sidebar {
+        top: 1rem;
+    }
+
+    .target-option {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 1rem;
+        background: var(--bs-body-bg);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .target-option:hover {
+        border-color: var(--bs-primary-border-subtle);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.06);
+        transform: translateY(-1px);
+    }
+
+    .target-option.is-selected {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.12);
+        background: var(--bs-primary-bg-subtle);
+    }
+
+    .pulse-dot {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 999px;
+        display: inline-block;
+    }
+
+    .description-clamp {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .selection-summary {
+        max-height: 16rem;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-8 col-xxl-9">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h1 class="h3 mb-2">Run Makefile Commands</h1>
+                        <p class="text-body-secondary mb-0">
+                            Start with the quick actions for the common flows, then use the guided and advanced sections when you need finer control.
+                        </p>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge text-bg-{{ 'warning' if job_summary.has_active else 'success' }} px-3 py-2">
+                            {{ job_summary.pulse_label }}: {{ job_summary.active }} active
+                        </span>
+                        <a href="{{ url_for('main.job_list') }}" class="btn btn-outline-secondary">View All Jobs</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if preparation_targets %}
+            <section class="mb-5">
+                <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
+                    <div>
+                        <h2 class="h4 mb-1">Preparation</h2>
+                        <p class="text-body-secondary mb-0">Start here when the repositories need bytecode or pre-run setup before collection.</p>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    {% for target in preparation_targets %}
+                        <div class="col-md-6">
+                            <form method="post" action="{{ url_for('main.run_target') }}" class="h-100" data-submit-feedback data-ajax-queue>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="target" value="{{ target.name }}">
+                                <button
+                                    type="submit"
+                                    class="btn btn-outline-primary quick-action-button w-100 text-start p-4"
+                                    data-loading-text="Queueing..."
+                                    data-bs-toggle="tooltip"
+                                    title="{{ target.description or 'Preparation target' }}"
+                                >
+                                    <span class="badge text-bg-primary mb-3">Preparation</span>
+                                    <span class="d-block fs-5 fw-semibold">{{ target.display_name | title }}</span>
+                                    {% if target.short_description %}
+                                        <span class="d-block small text-body-secondary mt-2">{{ target.short_description }}</span>
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+
+        {% if quick_actions %}
+            <section class="mb-5">
+                <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
+                    <div>
+                        <h2 class="h4 mb-1">Quick Actions</h2>
+                        <p class="text-body-secondary mb-0">The fastest way to run the main end-to-end flows.</p>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    {% for target in quick_actions %}
+                        <div class="col-md-4">
+                            <form method="post" action="{{ url_for('main.run_target') }}" class="h-100" data-submit-feedback data-ajax-queue>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="target" value="{{ target.name }}">
+                                {% if target.name == "collect-all" %}
+                                    {% set quick_button_class = "btn-primary" %}
+                                    {% set quick_badge_class = "text-bg-light text-primary" %}
+                                    {% set quick_hint = "Raw collection across software metrics and vulnerabilities" %}
+                                {% elif target.name == "case-study" %}
+                                    {% set quick_button_class = "btn-success" %}
+                                    {% set quick_badge_class = "text-bg-light text-success" %}
+                                    {% set quick_hint = "Recommended end-to-end run for one case study" %}
+                                {% else %}
+                                    {% set quick_button_class = "btn-dark" %}
+                                    {% set quick_badge_class = "text-bg-light text-dark" %}
+                                    {% set quick_hint = "Reusable experiment-oriented entry point" %}
+                                {% endif %}
+                                <button
+                                    type="submit"
+                                    class="btn {{ quick_button_class }} quick-action-button w-100 text-start p-4"
+                                    data-loading-text="Queueing..."
+                                    data-bs-toggle="tooltip"
+                                    title="{{ target.description or quick_hint }}"
+                                >
+                                    <span class="badge {{ quick_badge_class }} mb-3">Quick Action</span>
+                                    <span class="d-block fs-5 fw-semibold">{{ target.display_name | title }}</span>
+                                    <span class="d-block small opacity-75 mt-2">{{ quick_hint }}</span>
+                                </button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+
+        <section class="mb-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <h2 class="h5 mb-1">Workflow Guide</h2>
+                            <p class="text-body-secondary mb-0">A quick visual map of the typical MAVIS flow.</p>
+                        </div>
+                        {% if refresh_seconds %}
+                            <span class="badge text-bg-info">Auto refresh every {{ refresh_seconds }}s</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row row-cols-1 row-cols-md-3 row-cols-xl-6 g-3">
+                        {% for item in workflow_items %}
+                            <div class="col">
+                                <div class="workflow-step p-3">
+                                    <div class="workflow-index bg-primary-subtle text-primary mb-3">{{ loop.index }}</div>
+                                    <div class="fw-semibold">{{ item.label }}</div>
+                                    <div class="small text-body-secondary mb-2">{{ item.category }}</div>
+                                    {% if item.targets %}
+                                        <div class="d-grid gap-1">
+                                            {% for target in item.targets %}
+                                                <code class="small">{{ target.name }}</code>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <span class="small text-body-secondary">Implicit step</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">Guided Run</h2>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-light border mb-4">
+                        <div class="fw-semibold mb-1">Recommended flow</div>
+                        <div class="small text-body-secondary">
+                            Use <code>case-study</code> for the full end-to-end workflow, <code>collect-all</code> for raw collection only, and <code>experiment</code> when you want the experiment alias.
+                        </div>
+                    </div>
+
+                    <form method="post" action="{{ url_for('main.run_target') }}" class="row g-3" data-submit-feedback data-ajax-queue>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                        <div class="col-lg-5">
+                            <label for="target" class="form-label">Target</label>
+                            <select id="target" name="target" class="form-select" required>
+                                {% for category, targets in grouped_targets %}
+                                    {% if targets %}
+                                        <optgroup label="{{ category }}">
+                                            {% for target in targets %}
+                                                <option value="{{ target.name }}">
+                                                    {{ target.name }}{% if target.short_description %} - {{ target.short_description }}{% endif %}
+                                                </option>
+                                            {% endfor %}
+                                        </optgroup>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-lg-7">
+                            <label for="env_overrides" class="form-label">Environment overrides</label>
+                            <textarea
+                                id="env_overrides"
+                                name="env_overrides"
+                                class="form-control"
+                                rows="3"
+                                placeholder="JAVA_BUILD_BYTECODE=1&#10;METRIC_RESOURCE_TRACKING=1"
+                            ></textarea>
+                            <div class="form-text">Use one <code>KEY=VALUE</code> pair per line.</div>
+                        </div>
+
+                        <div class="col-12 d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary" data-loading-text="Queueing target...">Queue Target</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-5">
+            <form id="advanced-selection-form" method="post" action="{{ url_for('main.run_selected_targets') }}" data-submit-feedback data-ajax-queue>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                            <div>
+                                <h2 class="h5 mb-1">Select Commands</h2>
+                                <p class="text-body-secondary mb-0">Select one or more targets from the logical groups below, then queue them from the right sidebar whenever you are ready.</p>
+                            </div>
+                            <span class="badge text-bg-secondary">Advanced</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="accordion" id="advancedTargetsAccordion">
+                            {% for category, targets in advanced_sections %}
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="heading-{{ loop.index }}">
+                                        <button
+                                            class="accordion-button{% if not loop.first %} collapsed{% endif %}"
+                                            type="button"
+                                            data-bs-toggle="collapse"
+                                            data-bs-target="#collapse-{{ loop.index }}"
+                                            aria-expanded="{{ 'true' if loop.first else 'false' }}"
+                                            aria-controls="collapse-{{ loop.index }}"
+                                        >
+                                            <span class="me-2">{{ category }}</span>
+                                            <span class="badge text-bg-light">{{ targets | length }}</span>
+                                        </button>
+                                    </h2>
+                                    <div
+                                        id="collapse-{{ loop.index }}"
+                                        class="accordion-collapse collapse{% if loop.first %} show{% endif %}"
+                                        aria-labelledby="heading-{{ loop.index }}"
+                                        data-bs-parent="#advancedTargetsAccordion"
+                                    >
+                                        <div class="accordion-body">
+                                            <div class="row g-3">
+                                                {% for target in targets %}
+                                                    <div class="col-12">
+                                                        <label class="target-option d-flex align-items-start gap-3 p-3 w-100">
+                                                            <input class="form-check-input mt-1" type="checkbox" name="targets" value="{{ target.name }}">
+                                                            <div class="flex-grow-1">
+                                                                <div class="d-flex justify-content-between align-items-start gap-3">
+                                                                    <div class="fw-semibold">{{ target.name }}</div>
+                                                                    {% if category == "Software Metrics" %}
+                                                                        <span class="badge text-bg-primary">software-metrics</span>
+                                                                    {% elif category == "Vulnerabilities" %}
+                                                                        <span class="badge text-bg-danger">vulnerabilities</span>
+                                                                    {% elif category == "Pipelines" %}
+                                                                        <span class="badge text-bg-info">pipeline</span>
+                                                                    {% endif %}
+                                                                </div>
+                                                                {% if target.short_description %}
+                                                                    <div
+                                                                        class="description-clamp small text-body-secondary mt-2"
+                                                                        data-bs-toggle="tooltip"
+                                                                        title="{{ target.description }}"
+                                                                    >
+                                                                        {{ target.short_description }}
+                                                                    </div>
+                                                                {% endif %}
+                                                                {% if target.dependencies %}
+                                                                    <div class="small text-body-secondary mt-2">
+                                                                        Depends on {{ target.dependencies | join(', ') }}
+                                                                    </div>
+                                                                {% endif %}
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        <section id="repository-management">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">Repository Management</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-lg-5">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <div class="fw-semibold">Repository Snapshot</div>
+                                    <div class="text-body-secondary small">{{ repositories | length }} repos currently under <code>src/</code>.</div>
+                                </div>
+                                <form method="post" action="{{ url_for('main.clean_repositories_route') }}" data-submit-feedback>
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm" data-loading-text="Queueing clean-up...">Clean All</button>
+                                </form>
+                            </div>
+
+                            {% if repositories %}
+                                <div class="list-group">
+                                    {% for repository in repositories %}
+                                        <div class="list-group-item d-flex justify-content-between align-items-center gap-3">
+                                            <span class="text-break">{{ repository.name }}</span>
+                                            <form method="post" action="{{ url_for('main.delete_repository_route', repository_name=repository.name) }}" data-submit-feedback>
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm" data-loading-text="Queueing delete...">Delete</button>
+                                            </form>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="alert alert-light border mb-0">No repositories uploaded yet.</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-lg-7">
+                            <div class="row g-4">
+                                <div class="col-12">
+                                    <h3 class="h6">Batch Clone from Git</h3>
+                                    <form method="post" action="{{ url_for('main.clone_repositories_route') }}" class="d-grid gap-3" data-submit-feedback>
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <textarea
+                                            name="clone_specs"
+                                            class="form-control"
+                                            rows="5"
+                                            placeholder="https://github.com/google/guava.git,v33.0.0,guava&#10;https://github.com/google/gson.git"
+                                        ></textarea>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="1" id="replace_clone" name="replace_existing">
+                                            <label class="form-check-label" for="replace_clone">Replace existing folders with the same name</label>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary" data-loading-text="Queueing clone batch...">Queue Batch Clone</button>
+                                    </form>
+                                </div>
+
+                                <div class="col-12">
+                                    <h3 class="h6">Batch Zip Upload</h3>
+                                    <form method="post" action="{{ url_for('main.upload_archives_route') }}" enctype="multipart/form-data" class="d-grid gap-3" data-submit-feedback>
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <input class="form-control" type="file" name="zip_files" accept=".zip" multiple required>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="1" id="replace_zip" name="replace_existing">
+                                            <label class="form-check-label" for="replace_zip">Replace existing folders with the same name</label>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary" data-loading-text="Queueing zip import...">Queue Zip Import</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-xl-4 col-xxl-3">
+        <div class="dashboard-sidebar sticky-top d-grid gap-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div>
+                            <h2 class="h5 mb-1">Selection Queue</h2>
+                            <p class="text-body-secondary small mb-0">Scroll the command groups, pick what you need, then queue the selection from here.</p>
+                        </div>
+                        <span id="selected-target-count" class="badge text-bg-dark" aria-live="polite">0 selected</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="selected-target-empty" class="small text-body-secondary mb-3">No commands selected yet.</div>
+                    <div id="selected-target-list" class="list-group list-group-flush border rounded selection-summary d-none" aria-live="polite"></div>
+
+                    <div class="mt-3">
+                        <label for="sidebar_batch_env_overrides" class="form-label">Environment overrides</label>
+                        <textarea
+                            id="sidebar_batch_env_overrides"
+                            name="env_overrides"
+                            form="advanced-selection-form"
+                            class="form-control"
+                            rows="3"
+                            placeholder="JAVA_BUILD_BYTECODE=1&#10;METRIC_RESOURCE_TRACKING=1"
+                        ></textarea>
+                        <div class="form-text">These overrides are applied to every selected target in the queued batch.</div>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-3">
+                        <button
+                            id="sidebar-queue-button"
+                            type="submit"
+                            form="advanced-selection-form"
+                            class="btn btn-dark"
+                            data-loading-text="Queueing selection..."
+                            disabled
+                        >
+                            Queue Selected
+                        </button>
+                        <button
+                            id="sidebar-clear-selection"
+                            type="reset"
+                            form="advanced-selection-form"
+                            class="btn btn-outline-secondary"
+                            disabled
+                        >
+                            Clear Selection
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">System Pulse</h2>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="pulse-dot bg-{{ 'warning' if job_summary.has_active else 'success' }}"></span>
+                            <span class="fw-semibold">{{ job_summary.pulse_label }}</span>
+                        </div>
+                        <span class="small text-body-secondary">{{ job_summary.active }} active</span>
+                    </div>
+
+                    {% set total_jobs = jobs | length %}
+                    {% if total_jobs %}
+                        <div class="progress mb-3" role="progressbar" aria-label="Job status overview" aria-valuemin="0" aria-valuemax="100">
+                            {% if job_summary.queued %}
+                                <div class="progress-bar bg-secondary" style="width: {{ (job_summary.queued * 100 / total_jobs) | round(2) }}%"></div>
+                            {% endif %}
+                            {% if job_summary.running %}
+                                <div class="progress-bar bg-warning" style="width: {{ (job_summary.running * 100 / total_jobs) | round(2) }}%"></div>
+                            {% endif %}
+                            {% if job_summary.succeeded %}
+                                <div class="progress-bar bg-success" style="width: {{ (job_summary.succeeded * 100 / total_jobs) | round(2) }}%"></div>
+                            {% endif %}
+                            {% if job_summary.failed %}
+                                <div class="progress-bar bg-danger" style="width: {{ (job_summary.failed * 100 / total_jobs) | round(2) }}%"></div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge text-bg-secondary">Queued {{ job_summary.queued }}</span>
+                        <span class="badge text-bg-warning">Running {{ job_summary.running }}</span>
+                        <span class="badge text-bg-success">Done {{ job_summary.succeeded }}</span>
+                        <span class="badge text-bg-danger">Failed {{ job_summary.failed }}</span>
+                    </div>
+
+                    {% if refresh_seconds %}
+                        <div class="small text-body-secondary mt-3">The dashboard refreshes automatically while jobs are queued or running.</div>
+                    {% else %}
+                        <div class="small text-body-secondary mt-3">No active work right now. Queue a task to wake up the dashboard pulse.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">Recent Jobs</h2>
+                </div>
+                <div class="card-body p-0">
+                    {% if jobs %}
+                        <div class="list-group list-group-flush">
+                            {% for job in jobs %}
+                                <a href="{{ url_for('main.job_detail', job_id=job.id) }}" class="list-group-item list-group-item-action">
+                                    <div class="d-flex justify-content-between align-items-center gap-2">
+                                        <span class="fw-semibold text-break">{{ job.label }}</span>
+                                        <span class="badge text-bg-{{ status_classes[job.status] }}">{{ job.status }}</span>
+                                    </div>
+                                    <div class="small text-body-secondary mt-1">
+                                        Created {{ job.created_at }}
+                                    </div>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="p-3 text-body-secondary">No jobs queued yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h2 class="h5 mb-0">Repository Snapshot</h2>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="fw-semibold">{{ repositories | length }} repositories</span>
+                        <a href="#repository-management" class="btn btn-outline-secondary btn-sm">Manage</a>
+                    </div>
+                    {% if repositories %}
+                        <div class="list-group list-group-flush border rounded">
+                            {% for repository in repositories[:6] %}
+                                <div class="list-group-item text-break">{{ repository.name }}</div>
+                            {% endfor %}
+                        </div>
+                        {% if repositories | length > 6 %}
+                            <div class="small text-body-secondary mt-2">Showing the first 6 repositories.</div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-body-secondary small">No repositories uploaded yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((element) => {
+        new bootstrap.Tooltip(element);
+    });
+
+    document.querySelectorAll('form[data-submit-feedback]').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+            const button = event.submitter || form.querySelector('button[type="submit"]');
+            if (!button) {
+                return;
+            }
+            if (button.dataset.busy === '1') {
+                event.preventDefault();
+                return;
+            }
+
+            const originalHtml = button.innerHTML;
+            const setBusyState = () => {
+                button.dataset.busy = '1';
+                button.disabled = true;
+                const label = button.dataset.loadingText || 'Queueing...';
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>' + label;
+            };
+            const restoreState = () => {
+                button.dataset.busy = '0';
+                button.disabled = false;
+                button.innerHTML = originalHtml;
+            };
+
+            if (!form.hasAttribute('data-ajax-queue')) {
+                setBusyState();
+                return;
+            }
+
+            event.preventDefault();
+            setBusyState();
+
+            try {
+                const response = await fetch(form.action, {
+                    method: form.method || 'POST',
+                    body: new FormData(form),
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Unable to queue the selected command.');
+                }
+
+                window.showAppToast({
+                    title: payload.job_count > 1 ? 'Commands Queued' : 'Command Queued',
+                    message: payload.message || 'A new command has been queued.',
+                    tone: 'success',
+                    linkUrl: payload.job_detail_url || payload.jobs_url || '',
+                    linkLabel: payload.job_count > 1 ? 'Open jobs' : 'Open job',
+                });
+            } catch (error) {
+                window.showAppToast({
+                    title: 'Queue Failed',
+                    message: error.message || 'Unable to queue the selected command.',
+                    tone: 'danger',
+                });
+            } finally {
+                restoreState();
+            }
+        });
+    });
+
+    const advancedSelectionForm = document.getElementById('advanced-selection-form');
+    if (advancedSelectionForm) {
+        const targetCheckboxes = Array.from(
+            advancedSelectionForm.querySelectorAll('input[type="checkbox"][name="targets"]')
+        );
+        const selectedTargetCount = document.getElementById('selected-target-count');
+        const selectedTargetEmpty = document.getElementById('selected-target-empty');
+        const selectedTargetList = document.getElementById('selected-target-list');
+        const sidebarQueueButton = document.getElementById('sidebar-queue-button');
+        const sidebarClearButton = document.getElementById('sidebar-clear-selection');
+
+        const renderSelectionSummary = () => {
+            const selectedTargets = targetCheckboxes.filter((checkbox) => checkbox.checked);
+
+            targetCheckboxes.forEach((checkbox) => {
+                checkbox.closest('.target-option')?.classList.toggle('is-selected', checkbox.checked);
+            });
+
+            if (selectedTargetCount) {
+                selectedTargetCount.textContent = `${selectedTargets.length} selected`;
+            }
+
+            if (!selectedTargetList || !selectedTargetEmpty) {
+                return;
+            }
+
+            selectedTargetList.innerHTML = '';
+
+            if (!selectedTargets.length) {
+                selectedTargetEmpty.classList.remove('d-none');
+                selectedTargetList.classList.add('d-none');
+                if (sidebarQueueButton) {
+                    sidebarQueueButton.disabled = true;
+                }
+                if (sidebarClearButton) {
+                    sidebarClearButton.disabled = true;
+                }
+                return;
+            }
+
+            selectedTargets.forEach((checkbox, index) => {
+                const targetOption = checkbox.closest('.target-option');
+                const targetName =
+                    targetOption?.querySelector('.fw-semibold')?.textContent?.trim() || checkbox.value;
+                const targetBadge = targetOption?.querySelector('.badge')?.textContent?.trim();
+                const listItem = document.createElement('div');
+                listItem.className = 'list-group-item';
+
+                const title = document.createElement('div');
+                title.className = 'fw-semibold small text-break';
+                title.textContent = `${index + 1}. ${targetName}`;
+                listItem.appendChild(title);
+
+                if (targetBadge) {
+                    const meta = document.createElement('div');
+                    meta.className = 'small text-body-secondary mt-1';
+                    meta.textContent = targetBadge;
+                    listItem.appendChild(meta);
+                }
+
+                selectedTargetList.appendChild(listItem);
+            });
+
+            selectedTargetEmpty.classList.add('d-none');
+            selectedTargetList.classList.remove('d-none');
+            if (sidebarQueueButton) {
+                sidebarQueueButton.disabled = false;
+            }
+            if (sidebarClearButton) {
+                sidebarClearButton.disabled = false;
+            }
+        };
+
+        targetCheckboxes.forEach((checkbox) => {
+            checkbox.addEventListener('change', renderSelectionSummary);
+        });
+        advancedSelectionForm.addEventListener('reset', () => {
+            window.setTimeout(renderSelectionSummary, 0);
+        });
+
+        renderSelectionSummary();
+    }
+</script>
+{% endblock %}

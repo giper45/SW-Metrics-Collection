@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Insights | MAVIS Control Panel{% endblock %}
+
+{% block extra_head %}
+<style>
+    .insight-hero {
+        background:
+            radial-gradient(circle at top right, rgba(13, 110, 253, 0.2), transparent 32%),
+            radial-gradient(circle at bottom left, rgba(25, 135, 84, 0.18), transparent 30%),
+            linear-gradient(135deg, #0f172a, #1e293b 56%, #334155);
+        color: white;
+        border-radius: 1.5rem;
+        overflow: hidden;
+    }
+
+    .insight-card {
+        border: 0;
+        border-radius: 1.25rem;
+    }
+
+    .insight-link-card {
+        border-radius: 1.25rem;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .insight-link-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 1rem 2rem rgba(15, 23, 42, 0.12);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set vulnerability_href = url_for('main.insights_vulnerabilities', source=overview.preferred_vulnerability_source) if overview.preferred_vulnerability_source else url_for('main.insights_vulnerabilities') %}
+{% set metrics_href = url_for('main.insights_metrics', source=overview.preferred_metric_source) if overview.preferred_metric_source else url_for('main.insights_metrics') %}
+<div class="insight-hero shadow-sm p-4 p-lg-5 mb-4">
+    <div class="row align-items-center g-4">
+        <div class="col-lg-8">
+            <span class="badge rounded-pill text-bg-light text-dark mb-3">Insights Hub</span>
+            <h1 class="display-6 fw-semibold mb-3">Read vulnerability findings and software metrics with one clean workflow.</h1>
+            <p class="mb-0 text-white-50">
+                Browse raw collector output or normalized results, then drill into security findings and metric measurements with focused filters.
+            </p>
+        </div>
+        <div class="col-lg-4">
+            <div class="row g-3">
+                <div class="col-6">
+                    <div class="bg-white text-dark rounded-4 p-3 h-100">
+                        <div class="small text-uppercase text-secondary">Rows</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(overview.totals.rows) }}</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="bg-white text-dark rounded-4 p-3 h-100">
+                        <div class="small text-uppercase text-secondary">Projects</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(overview.totals.projects) }}</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="bg-white text-dark rounded-4 p-3 h-100">
+                        <div class="small text-uppercase text-secondary">Runs</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(overview.totals.runs) }}</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="bg-white text-dark rounded-4 p-3 h-100">
+                        <div class="small text-uppercase text-secondary">Metric Families</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(overview.totals.metrics) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-6">
+        <a href="{{ vulnerability_href }}" class="text-decoration-none">
+            <div class="card insight-link-card shadow-sm h-100">
+                <div class="card-body p-4">
+                    <span class="badge text-bg-danger mb-3">Vulnerability Findings</span>
+                    <h2 class="h3 text-dark">Security explorer</h2>
+                    <p class="text-body-secondary mb-4">
+                        Review embedded findings, severity distribution, affected components, rules, and CWEs with fast filtering.
+                    </p>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="text-primary fw-semibold">Open vulnerability view</span>
+                        <span class="text-body-secondary small">Default source: {{ source_label(overview.preferred_vulnerability_source) if overview.preferred_vulnerability_source else 'None' }}</span>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-xl-6">
+        <a href="{{ metrics_href }}" class="text-decoration-none">
+            <div class="card insight-link-card shadow-sm h-100">
+                <div class="card-body p-4">
+                    <span class="badge text-bg-primary mb-3">Software Metrics</span>
+                    <h2 class="h3 text-dark">Measurement explorer</h2>
+                    <p class="text-body-secondary mb-4">
+                        Slice measurements by run, project, metric, tool, and component type, then inspect the latest collected values.
+                    </p>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="text-primary fw-semibold">Open metrics view</span>
+                        <span class="text-body-secondary small">Default source: {{ source_label(overview.preferred_metric_source) if overview.preferred_metric_source else 'None' }}</span>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% for source in overview.sources %}
+        <div class="col-xl-6">
+            <div class="card insight-card shadow-sm h-100">
+                <div class="card-header bg-white border-0 pt-4 px-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h2 class="h5 mb-1">{{ source.label }}</h2>
+                            <p class="text-body-secondary mb-0 small">Inventory snapshot for this result source.</p>
+                        </div>
+                        {% if source.key == overview.preferred_source %}
+                            <span class="badge text-bg-success">Preferred</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="bg-body-tertiary rounded-4 p-3">
+                                <div class="small text-uppercase text-secondary">Files</div>
+                                <div class="fs-4 fw-semibold">{{ format_number(source.file_count) }}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="bg-body-tertiary rounded-4 p-3">
+                                <div class="small text-uppercase text-secondary">Rows</div>
+                                <div class="fs-4 fw-semibold">{{ format_number(source.row_count) }}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="bg-body-tertiary rounded-4 p-3">
+                                <div class="small text-uppercase text-secondary">Metrics</div>
+                                <div class="fs-4 fw-semibold">{{ format_number(source.metric_rows) }}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="bg-body-tertiary rounded-4 p-3">
+                                <div class="small text-uppercase text-secondary">Findings</div>
+                                <div class="fs-4 fw-semibold">{{ format_number(source.vulnerability_total) }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-4 flex-wrap">
+                        <a href="{{ url_for('main.insights_metrics', source=source.key) }}" class="btn btn-outline-primary">Browse metrics</a>
+                        <a href="{{ url_for('main.insights_vulnerabilities', source=source.key) }}" class="btn btn-outline-danger">Browse vulnerabilities</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

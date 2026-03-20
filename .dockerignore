@@ -1,0 +1,13 @@
+.git
+.pytest_cache
+.vscode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.webapp_uploads/
+analysis_out/
+paper/
+results/
+results_normalized/
+src/

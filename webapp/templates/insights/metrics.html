@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}Metrics | MAVIS Control Panel{% endblock %}
+
+{% block extra_head %}
+<style>
+    .sticky-panel {
+        top: 1rem;
+    }
+
+    .metric-group-card {
+        border-radius: 1.25rem;
+        border: 0;
+    }
+
+    .metric-table td,
+    .metric-table th {
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="h2 mb-2">Software Metrics</h1>
+        <p class="text-body-secondary mb-0">Inspect collected measurements across runs, tools, components, and normalized sources.</p>
+    </div>
+    <a href="{{ url_for('main.insights_overview') }}" class="btn btn-outline-secondary">Back to Insights</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-3">
+        <div class="card shadow-sm sticky-panel">
+            <div class="card-header bg-white">
+                <h2 class="h5 mb-0">Filters</h2>
+            </div>
+            <div class="card-body">
+                <form method="get" class="d-grid gap-3">
+                    <div>
+                        <label class="form-label" for="source">Source</label>
+                        <select class="form-select" id="source" name="source">
+                            <option value="">Auto</option>
+                            {% for source in view_data.options.sources %}
+                                <option value="{{ source }}"{% if view_data.filters.source == source %} selected{% endif %}>{{ source_label(source) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="project">Project</label>
+                        <select class="form-select" id="project" name="project">
+                            <option value="">All projects</option>
+                            {% for project in view_data.options.projects %}
+                                <option value="{{ project }}"{% if view_data.filters.project == project %} selected{% endif %}>{{ project }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="metric">Metric</label>
+                        <select class="form-select" id="metric" name="metric">
+                            <option value="">All metrics</option>
+                            {% for metric in view_data.options.metrics %}
+                                <option value="{{ metric }}"{% if view_data.filters.metric == metric %} selected{% endif %}>{{ metric }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="tool">Tool</label>
+                        <select class="form-select" id="tool" name="tool">
+                            <option value="">All tools</option>
+                            {% for tool in view_data.options.tools %}
+                                <option value="{{ tool }}"{% if view_data.filters.tool == tool %} selected{% endif %}>{{ tool }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="component_type">Component type</label>
+                        <select class="form-select" id="component_type" name="component_type">
+                            <option value="">All types</option>
+                            {% for component_type in view_data.options.component_types %}
+                                <option value="{{ component_type }}"{% if view_data.filters.component_type == component_type %} selected{% endif %}>{{ component_type }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="run_id">Run</label>
+                        <select class="form-select" id="run_id" name="run_id">
+                            <option value="">All runs</option>
+                            {% for run_id in view_data.options.runs %}
+                                <option value="{{ run_id }}"{% if view_data.filters.run_id == run_id %} selected{% endif %}>{{ run_id }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="status">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">All statuses</option>
+                            {% for status in view_data.options.statuses %}
+                                <option value="{{ status }}"{% if view_data.filters.status == status %} selected{% endif %}>{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="search">Search</label>
+                        <input class="form-control" id="search" name="search" value="{{ view_data.filters.search }}" placeholder="Metric, component, variant">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1">Apply</button>
+                        <a href="{{ url_for('main.insights_metrics') }}" class="btn btn-outline-secondary">Reset</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-9">
+        <div class="row g-3 mb-4">
+            <div class="col-md-6 col-xl-3">
+                <div class="card metric-group-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Measurements</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.rows) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="card metric-group-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Projects</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.projects) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="card metric-group-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Metrics</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.metrics) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-3">
+                <div class="card metric-group-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Tools</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.tools) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if view_data.groups %}
+            <div class="row g-3 mb-4">
+                {% for group in view_data.groups %}
+                    <div class="col-md-6 col-xxl-4">
+                        <div class="card metric-group-card shadow-sm h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                                    <div>
+                                        <span class="badge text-bg-{{ metric_badge(group.metric) }} mb-2">{{ group.metric }}</span>
+                                        <h2 class="h5 mb-1">{{ group.measure }}</h2>
+                                    </div>
+                                    <div class="text-end small text-body-secondary">
+                                        {{ format_number(group.rows) }} rows
+                                    </div>
+                                </div>
+                                <div class="small text-body-secondary mb-3">
+                                    {{ format_number(group.tools) }} tools · {{ format_number(group.components) }} components
+                                </div>
+                                {% if group.avg_value is not none %}
+                                    <div class="row g-2 small">
+                                        <div class="col-4">
+                                            <div class="bg-body-tertiary rounded-3 p-2">
+                                                <div class="text-secondary text-uppercase">Min</div>
+                                                <div class="fw-semibold">{{ format_number(group.min_value) }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="bg-body-tertiary rounded-3 p-2">
+                                                <div class="text-secondary text-uppercase">Avg</div>
+                                                <div class="fw-semibold">{{ format_number(group.avg_value) }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="bg-body-tertiary rounded-3 p-2">
+                                                <div class="text-secondary text-uppercase">Max</div>
+                                                <div class="fw-semibold">{{ format_number(group.max_value) }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if view_data.rows %}
+            <div class="card shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h2 class="h5 mb-0">Measurements</h2>
+                    <div class="small text-body-secondary">
+                        Showing {{ format_number(view_data.rows|length) }} of {{ format_number(view_data.total_rows) }}
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover metric-table mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Project</th>
+                                <th>Measure</th>
+                                <th>Value</th>
+                                <th>Tool</th>
+                                <th>Component</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in view_data.rows %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">{{ row.project }}</div>
+                                        <div class="small text-body-secondary">{{ row.run_id }}</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge text-bg-{{ metric_badge(row.metric) }} mb-1">{{ row.metric }}</span>
+                                        <div class="fw-semibold">{{ row.submetric or row.metric }}</div>
+                                        <div class="small text-body-secondary">{{ row.variant }}</div>
+                                    </td>
+                                    <td class="fw-semibold">{{ format_number(row.value) }}</td>
+                                    <td>
+                                        <div>{{ row.tool }}</div>
+                                        <div class="small text-body-secondary">{{ row.tool_version }}</div>
+                                    </td>
+                                    <td>
+                                        <div>{{ row.component }}</div>
+                                        <div class="small text-body-secondary">{{ row.component_type }} · {{ source_label(row._source) }}</div>
+                                    </td>
+                                    <td class="small text-body-secondary">{{ row.timestamp_utc }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if view_data.hidden_count %}
+                <div class="alert alert-light border mt-4 mb-0">
+                    The table is capped to keep the page readable. Narrow the filters to inspect more than {{ format_number(view_data.rows|length) }} rows.
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="card shadow-sm">
+                <div class="card-body p-5 text-center">
+                    <h2 class="h4">No software metrics match the current filters.</h2>
+                    <p class="text-body-secondary mb-0">Try another source or run a collection target from the Run page.</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

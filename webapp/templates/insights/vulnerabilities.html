@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}Vulnerabilities | MAVIS Control Panel{% endblock %}
+
+{% block extra_head %}
+<style>
+    .sticky-panel {
+        top: 1rem;
+    }
+
+    .finding-card {
+        border-radius: 1.25rem;
+        border: 0;
+    }
+
+    .summary-card {
+        border-radius: 1.25rem;
+        border: 0;
+    }
+
+    .finding-list-item + .finding-list-item {
+        border-top: 1px solid var(--bs-border-color);
+    }
+
+    .severity-pill {
+        min-width: 5rem;
+        text-align: center;
+    }
+
+    .feature-tile {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 1rem;
+        background: var(--bs-body-bg);
+    }
+
+    .flow-step {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 1rem;
+        background: var(--bs-body-bg);
+    }
+
+    .location-snippet {
+        margin: 0;
+        border-radius: 0.875rem;
+        background: var(--bs-tertiary-bg);
+        padding: 0.875rem 1rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="h2 mb-2">Vulnerability Findings</h1>
+        <p class="text-body-secondary mb-0">Read embedded security findings, grouped by project component and scanner output.</p>
+    </div>
+    <a href="{{ url_for('main.insights_overview') }}" class="btn btn-outline-secondary">Back to Insights</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-3">
+        <div class="card shadow-sm sticky-panel">
+            <div class="card-header bg-white">
+                <h2 class="h5 mb-0">Filters</h2>
+            </div>
+            <div class="card-body">
+                <form method="get" class="d-grid gap-3">
+                    <div>
+                        <label class="form-label" for="source">Source</label>
+                        <select class="form-select" id="source" name="source">
+                            <option value="">Auto</option>
+                            {% for source in view_data.options.sources %}
+                                <option value="{{ source }}"{% if view_data.filters.source == source %} selected{% endif %}>{{ source_label(source) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="project">Project</label>
+                        <select class="form-select" id="project" name="project">
+                            <option value="">All projects</option>
+                            {% for project in view_data.options.projects %}
+                                <option value="{{ project }}"{% if view_data.filters.project == project %} selected{% endif %}>{{ project }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="tool">Tool</label>
+                        <select class="form-select" id="tool" name="tool">
+                            <option value="">All tools</option>
+                            {% for tool in view_data.options.tools %}
+                                <option value="{{ tool }}"{% if view_data.filters.tool == tool %} selected{% endif %}>{{ tool }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="run_id">Run</label>
+                        <select class="form-select" id="run_id" name="run_id">
+                            <option value="">All runs</option>
+                            {% for run_id in view_data.options.runs %}
+                                <option value="{{ run_id }}"{% if view_data.filters.run_id == run_id %} selected{% endif %}>{{ run_id }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="component">Component</label>
+                        <select class="form-select" id="component" name="component">
+                            <option value="">All components</option>
+                            {% for component in view_data.options.components %}
+                                <option value="{{ component }}"{% if view_data.filters.component == component %} selected{% endif %}>{{ component }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="severity">Severity</label>
+                        <select class="form-select" id="severity" name="severity">
+                            <option value="">All severities</option>
+                            {% for severity in severity_order %}
+                                <option value="{{ severity }}"{% if view_data.filters.severity == severity %} selected{% endif %}>{{ severity|title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="search">Search</label>
+                        <input class="form-control" id="search" name="search" value="{{ view_data.filters.search }}" placeholder="Rule, CWE, file, message">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger flex-grow-1">Apply</button>
+                        <a href="{{ url_for('main.insights_vulnerabilities') }}" class="btn btn-outline-secondary">Reset</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-9">
+        <div class="row g-3 mb-4">
+            <div class="col-md-4 col-xl-2">
+                <div class="card summary-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Findings</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.findings) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="card summary-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Critical + High</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.high_priority) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="card summary-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Components</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.components) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="card summary-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Rules</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.rules) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="card summary-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">CWEs</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.cwes) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="card summary-card shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="small text-uppercase text-secondary">Truncated</div>
+                        <div class="fs-3 fw-semibold">{{ format_number(view_data.summary.truncated) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <span class="fw-semibold">Severity profile</span>
+                    {% for severity in severity_order %}
+                        <span class="badge text-bg-{{ severity_badge(severity) }} severity-pill">
+                            {{ severity|title }} {{ format_number(view_data.summary.severity_breakdown[severity]) }}
+                        </span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if view_data.entries %}
+            <div class="d-grid gap-4">
+                {% for entry in view_data.entries %}
+                    {% set row = entry.row %}
+                    <div class="card finding-card shadow-sm">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+                                <div>
+                                    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                                        <span class="badge text-bg-dark">{{ row.project }}</span>
+                                        <span class="badge text-bg-light border">{{ row.component_type }}</span>
+                                        <span class="badge text-bg-{{ severity_badge(entry.top_severity) }}">{{ entry.top_severity|title }}</span>
+                                        <span class="badge text-bg-secondary">{{ source_label(row._source) }}</span>
+                                    </div>
+                                    <h2 class="h4 mb-1">{{ row.component }}</h2>
+                                    <div class="text-body-secondary">
+                                        {{ row.tool }} · {{ row.variant }} · run {{ row.run_id }}
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="small text-uppercase text-secondary">Total findings</div>
+                                    <div class="display-6 fw-semibold">{{ format_number(entry.summary_total) }}</div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                {% for severity in severity_order %}
+                                    <span class="badge text-bg-{{ severity_badge(severity) }}">
+                                        {{ severity|title }} {{ format_number(entry.severity_breakdown[severity]) }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+
+                            {% if entry.visible_findings %}
+                                <div class="border rounded-4 overflow-hidden">
+                                    {% for finding in entry.visible_findings %}
+                                        <div class="finding-list-item p-3">
+                                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                                <div>
+                                                    <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+                                                        <span class="badge text-bg-{{ severity_badge(finding.severity) }}">{{ finding.severity|title }}</span>
+                                                        {% if finding.rule_id %}
+                                                            <code>{{ finding.rule_id }}</code>
+                                                        {% endif %}
+                                                        {% if finding.rule_name %}
+                                                            <span class="fw-semibold">{{ finding.rule_name }}</span>
+                                                        {% endif %}
+                                                    </div>
+                                                    <div class="mb-2">{{ finding.message or "No message provided." }}</div>
+                                                    <div class="small text-body-secondary">
+                                                        {% if finding.primary_location %}
+                                                            <span>{{ finding.primary_location.display_label }}</span>
+                                                        {% endif %}
+                                                        {% if finding.class_name %}
+                                                            <span> · {{ finding.class_name }}</span>
+                                                        {% endif %}
+                                                        {% if finding.method_name %}
+                                                            <span> · {{ finding.method_name }}()</span>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                <div class="text-end small">
+                                                    {% if finding.confidence %}
+                                                        <div class="text-body-secondary">confidence {{ finding.confidence }}</div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            {% if finding.cwe_ids or finding.owasp_tags %}
+                                                <div class="d-flex gap-2 flex-wrap mt-3">
+                                                    {% for cwe in finding.cwe_ids %}
+                                                        <span class="badge text-bg-light border">{{ cwe }}</span>
+                                                    {% endfor %}
+                                                    {% for tag in finding.owasp_tags %}
+                                                        <span class="badge text-bg-light border">{{ tag }}</span>
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+
+                                            <div class="row g-3 mt-1">
+                                                <div class="col-xl-4">
+                                                    <div class="small text-uppercase text-secondary mb-2">Observed Features</div>
+                                                    <div class="d-grid gap-2">
+                                                        {% for feature in finding.feature_rows %}
+                                                            <div class="feature-tile p-3">
+                                                                <div class="small text-uppercase text-secondary">{{ feature.label }}</div>
+                                                                <div class="fw-semibold{% if not feature.available %} text-body-secondary{% endif %}">
+                                                                    {{ feature.value }}
+                                                                </div>
+                                                            </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+
+                                                <div class="col-xl-8">
+                                                    <div class="small text-uppercase text-secondary mb-2">Primary Location</div>
+                                                    {% if finding.primary_location %}
+                                                        <div class="feature-tile p-3 mb-3">
+                                                            <div class="fw-semibold">{{ finding.primary_location.display_label }}</div>
+                                                            {% if finding.primary_location.message %}
+                                                                <div class="small text-body-secondary mt-2">{{ finding.primary_location.message }}</div>
+                                                            {% endif %}
+                                                            {% if finding.primary_location.has_snippet %}
+                                                                <pre class="location-snippet mt-3"><code>{{ finding.primary_location.snippet }}</code></pre>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% else %}
+                                                        <div class="feature-tile p-3 mb-3 text-body-secondary">N/A</div>
+                                                    {% endif %}
+
+                                                    <div class="small text-uppercase text-secondary mb-2">Flow Trace</div>
+                                                    {% if finding.flow_steps %}
+                                                        <div class="d-grid gap-2">
+                                                            {% for step in finding.flow_steps %}
+                                                                <div class="flow-step p-3">
+                                                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                                                        <div>
+                                                                            <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+                                                                                {% if step.role == "source" %}
+                                                                                    <span class="badge text-bg-success">Source</span>
+                                                                                {% elif step.role == "sink" %}
+                                                                                    <span class="badge text-bg-danger">Sink</span>
+                                                                                {% else %}
+                                                                                    <span class="badge text-bg-secondary">Step {{ loop.index }}</span>
+                                                                                {% endif %}
+                                                                                <span class="fw-semibold">{{ step.display_label }}</span>
+                                                                            </div>
+                                                                            {% if step.message %}
+                                                                                <div class="small text-body-secondary">{{ step.message }}</div>
+                                                                            {% endif %}
+                                                                        </div>
+                                                                        <div class="small text-body-secondary text-end">
+                                                                            {% if step.importance %}
+                                                                                <div>{{ step.importance }}</div>
+                                                                            {% endif %}
+                                                                            {% if step.execution_order is not none %}
+                                                                                <div>order {{ step.execution_order }}</div>
+                                                                            {% endif %}
+                                                                        </div>
+                                                                    </div>
+                                                                    {% if step.has_snippet %}
+                                                                        <pre class="location-snippet mt-3"><code>{{ step.snippet }}</code></pre>
+                                                                    {% endif %}
+                                                                </div>
+                                                            {% endfor %}
+                                                        </div>
+                                                    {% else %}
+                                                        <div class="feature-tile p-3 text-body-secondary">
+                                                            N/A. This tool output does not expose a source-to-sink flow trace for this finding.
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="alert alert-light border mb-0">
+                                    {% if entry.summary_total == 0 %}
+                                        No findings were reported for this component.
+                                    {% elif entry.findings_truncated %}
+                                        Findings exist for this component, but the embedded list is truncated or filtered out by the current query.
+                                    {% else %}
+                                        No embedded findings match the current filters.
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            {% if view_data.hidden_count %}
+                <div class="alert alert-light border mt-4 mb-0">
+                    Showing the first {{ format_number(view_data.entries|length) }} components out of {{ format_number(view_data.total_entries) }} matches.
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="card shadow-sm">
+                <div class="card-body p-5 text-center">
+                    <h2 class="h4">No vulnerability findings match the current filters.</h2>
+                    <p class="text-body-secondary mb-0">Try another result source, reset the filters, or run a vulnerability collection target from the Run page.</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
