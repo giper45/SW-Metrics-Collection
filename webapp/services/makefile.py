@@ -70,6 +70,7 @@ DISPLAY_NAME_OVERRIDES = {
     "collect-size-all": "Size Suite",
     "collect-vulnerability-all": "Vulnerability Suite",
     "collect-vulnerability-codeql-java": "CodeQL",
+    "collect-vulnerability-pmd-jsp-security": "PMD (JSP)",
     "collect-vulnerability-dependency-check": "Dependency-Check",
     "collect-vulnerability-psalm-php": "Psalm",
     "collect-vulnerability-pmd-security": "PMD",

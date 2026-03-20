@@ -20,6 +20,7 @@ REQUIRED_CONTAINERS = [
     "metrics/vulnerability/php/vulnerability-psalm-php",
     "metrics/vulnerability/java/vulnerability-pmd-security",
     "metrics/vulnerability/java/vulnerability-spotbugs-findsecbugs",
+    "metrics/vulnerability/web/vulnerability-pmd-jsp-security",
     "metrics/duplication/java/duplication-jscpd",
     "metrics/maintainability/java/mi-halstead-java",
     "metrics/quality/java/static-warnings-checkstyle",
