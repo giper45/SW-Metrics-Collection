@@ -30,6 +30,84 @@ CATEGORY_ORDER = [
     "Maintenance",
     "Other",
 ]
+DISPLAY_NAME_OVERRIDES = {
+    "archive": "Archive Results",
+    "agreement": "Agreement Analysis",
+    "case-studies": "Case Studies",
+    "case-study": "Case Study",
+    "clean": "Clean Workspace",
+    "clean-case-study": "Clean Case Study",
+    "clean-experiment": "Clean Experiment",
+    "clean-src": "Clean Repositories",
+    "collect-all": "Full Collection",
+    "collect-cc-ck": "CK (Cyclomatic Complexity)",
+    "collect-cc-lizard": "Lizard",
+    "collect-cc-radon": "Radon",
+    "collect-ce-ca-ck-cbo": "CK (CBO Coupling)",
+    "collect-ce-ca-jdepend": "JDepend",
+    "collect-churn-git": "Git Churn",
+    "collect-class-count-javaparser": "JavaParser (Class Count)",
+    "collect-cohesion-all": "Cohesion Suite",
+    "collect-complexity-all": "Complexity Suite",
+    "collect-coupling-all": "Coupling Suite",
+    "collect-coverage-jacoco": "JaCoCo",
+    "collect-duplication-jscpd": "JSCPD",
+    "collect-lcom-ck": "CK (LCOM)",
+    "collect-lcom-ckjm": "CKJM (LCOM)",
+    "collect-loc-cloc": "CLOC",
+    "collect-loc-scc": "SCC",
+    "collect-loc-tokei": "Tokei",
+    "collect-mi-halstead-java": "Halstead Java (MI)",
+    "collect-normalized-loc-cloc": "CLOC (Normalized LOC)",
+    "collect-package-count-javaparser": "JavaParser (Package Count)",
+    "collect-paper-extras": "Paper Extras",
+    "collect-size-all": "Size Suite",
+    "collect-vulnerability-all": "Vulnerability Suite",
+    "collect-vulnerability-codeql-java": "CodeQL",
+    "collect-vulnerability-dependency-check": "Dependency-Check",
+    "collect-vulnerability-pmd-security": "PMD",
+    "collect-vulnerability-spotbugs-findsecbugs": "SpotBugs + FindSecBugs",
+    "compute-structure-inventory": "Structure Inventory",
+    "dataset": "Build Dataset",
+    "experiment": "Experiment",
+    "experiments": "Experiments",
+    "manifest": "Build Manifest",
+    "normalize": "Normalize Results",
+    "normalize-vulnerability-sarif": "Normalize SARIF",
+    "paper-tables": "Paper Tables",
+    "prepare-java-bytecode": "Prepare Java Bytecode",
+    "prepare-java-bytecode-if-enabled": "Prepare Java Bytecode (If Enabled)",
+    "print-run-id": "Print Run ID",
+    "report": "Generate Report",
+    "validate-results": "Validate Results",
+}
+TOKEN_LABELS = {
+    "ca": "CA",
+    "cc": "CC",
+    "ce": "CE",
+    "ck": "CK",
+    "ckjm": "CKJM",
+    "cloc": "CLOC",
+    "cbo": "CBO",
+    "codeql": "CodeQL",
+    "findsecbugs": "FindSecBugs",
+    "git": "Git",
+    "halstead": "Halstead",
+    "jacoco": "JaCoCo",
+    "javaparser": "JavaParser",
+    "jscpd": "JSCPD",
+    "jdepend": "JDepend",
+    "lcom": "LCOM",
+    "loc": "LOC",
+    "mi": "MI",
+    "osv": "OSV",
+    "pmd": "PMD",
+    "sarif": "SARIF",
+    "scc": "SCC",
+    "semgrep": "Semgrep",
+    "spotbugs": "SpotBugs",
+    "src": "SRC",
+}
 
 
 @dataclass(frozen=True)
@@ -41,7 +119,7 @@ class MakeTarget:
 
     @property
     def display_name(self) -> str:
-        return self.name.replace("-", " ")
+        return format_target_display_name(self.name)
 
     @property
     def short_description(self) -> str:
@@ -152,6 +230,16 @@ def target_lookup(targets: list[MakeTarget]) -> dict[str, MakeTarget]:
     return {target.name: target for target in targets}
 
 
+def format_target_display_name(target_name: str) -> str:
+    if target_name in DISPLAY_NAME_OVERRIDES:
+        return DISPLAY_NAME_OVERRIDES[target_name]
+
+    parts = [part for part in target_name.replace("_", "-").split("-") if part]
+    if not parts:
+        return target_name
+    return " ".join(_format_target_token(part) for part in parts)
+
+
 def run_make_target(
     job: OperationJob,
     project_root: Path,
@@ -205,3 +293,10 @@ def _recipe_comment_text(raw_line: str) -> str | None:
         text = stripped[1:].strip()
         return text or None
     return None
+
+
+def _format_target_token(token: str) -> str:
+    lowered = token.lower()
+    if lowered in TOKEN_LABELS:
+        return TOKEN_LABELS[lowered]
+    return token.replace(".", " ").title()

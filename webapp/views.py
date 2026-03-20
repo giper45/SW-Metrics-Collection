@@ -33,6 +33,8 @@ from .services.results import (
     metric_badge,
     severity_badge,
     source_label,
+    tool_badge,
+    tool_label,
 )
 from .services.repositories import (
     clean_repositories,
@@ -144,6 +146,18 @@ def _workflow_items(targets: list) -> list[dict]:
     return items
 
 
+def _queue_target_message(targets: list) -> str:
+    labels = [target.display_name for target in targets]
+    if not labels:
+        return "Queued command."
+    if len(labels) == 1:
+        return f"Queued {labels[0]}."
+    if len(labels) <= 3:
+        return f"Queued {len(labels)} commands: {', '.join(labels)}."
+    preview = ", ".join(labels[:3])
+    return f"Queued {len(labels)} commands: {preview}, +{len(labels) - 3} more."
+
+
 def _preparation_targets(targets: list) -> list:
     return [target for target in targets if target.category == "Preparation"]
 
@@ -222,6 +236,8 @@ def insights_vulnerabilities():
         view_data=view_data,
         severity_badge=severity_badge,
         source_label=source_label,
+        tool_badge=tool_badge,
+        tool_label=tool_label,
         format_number=format_number,
         severity_order=("critical", "high", "medium", "low", "info", "unknown"),
     )
@@ -249,6 +265,8 @@ def insights_metrics():
         view_data=view_data,
         metric_badge=metric_badge,
         source_label=source_label,
+        tool_badge=tool_badge,
+        tool_label=tool_label,
         format_number=format_number,
     )
 
@@ -283,8 +301,9 @@ def job_detail(job_id: str):
 @csrf_protect
 def run_target():
     target_name = request.form.get("target", "").strip()
-    available_targets = {target.name for target in _all_targets()}
-    if target_name not in available_targets:
+    available_targets = target_lookup(_all_targets())
+    target = available_targets.get(target_name)
+    if target is None:
         return _queue_error_response("Unknown Makefile target.", status_code=400)
 
     try:
@@ -294,7 +313,7 @@ def run_target():
 
     job = _queue().enqueue(
         kind="make",
-        label=f"make {target_name}",
+        label=f"Run {target.display_name}",
         handler=partial(
             run_make_target,
             project_root=current_app.config["PROJECT_ROOT"],
@@ -303,7 +322,7 @@ def run_target():
         ),
     )
     return _queue_success_response(
-        f"Queued make target '{target_name}'.",
+        _queue_target_message([target]),
         job_ids=[job.id],
     )
 
@@ -327,10 +346,12 @@ def run_selected_targets():
         return _queue_error_response(str(exc), status_code=400)
 
     queued_jobs = []
+    selected_targets = [available_targets[target_name] for target_name in selected_names]
     for target_name in selected_names:
+        target = available_targets[target_name]
         job = _queue().enqueue(
             kind="make",
-            label=f"make {target_name}",
+            label=f"Run {target.display_name}",
             handler=partial(
                 run_make_target,
                 project_root=current_app.config["PROJECT_ROOT"],
@@ -341,7 +362,7 @@ def run_selected_targets():
         queued_jobs.append(job)
 
     return _queue_success_response(
-        f"Queued {len(queued_jobs)} target(s): {', '.join(selected_names)}.",
+        _queue_target_message(selected_targets),
         job_ids=[job.id for job in queued_jobs],
     )
 

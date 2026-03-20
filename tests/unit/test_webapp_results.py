@@ -71,6 +71,7 @@ def test_results_service_builds_vulnerability_summary(tmp_path):
     assert view_data["summary"]["findings"] == 2
     assert view_data["summary"]["high_priority"] == 1
     assert view_data["summary"]["rules"] == 2
+    assert view_data["summary"]["tool_names"] == ["spotbugs"]
     assert view_data["entries"][0]["visible_findings"][0]["rule_id"] == "WEAK_HASH"
 
 
@@ -275,7 +276,9 @@ def test_results_service_builds_metric_view(tmp_path):
     view_data = build_metrics_view(rows, {"source": "raw", "metric": "", "search": ""})
 
     assert view_data["summary"]["rows"] == 2
+    assert view_data["summary"]["tool_names"] == ["cloc", "lizard"]
     assert {group["measure"] for group in view_data["groups"]} == {"loc", "cc_proxy_mean"}
+    assert any(group["tool_names"] == ["cloc"] for group in view_data["groups"])
     assert view_data["rows"][0]["component"] in {"src/Main.java", "core"}
 
 
@@ -496,11 +499,14 @@ def test_results_routes_render_after_login(tmp_path):
     assert vulnerabilities.status_code == 200
     vulnerabilities_html = vulnerabilities.get_data(as_text=True)
     assert "SQL_INJECTION" in vulnerabilities_html
+    assert "CodeQL" in vulnerabilities_html
     assert "Observed Features" in vulnerabilities_html
     assert "Flow Trace" in vulnerabilities_html
     assert "N/A. This tool output does not expose a source-to-sink flow trace for this finding." in vulnerabilities_html
     assert metrics.status_code == 200
-    assert "src/A.java" in metrics.get_data(as_text=True)
+    metrics_html = metrics.get_data(as_text=True)
+    assert "src/A.java" in metrics_html
+    assert "CLOC" in metrics_html
 
 
 def test_ajax_queue_selected_targets_returns_json(tmp_path):
@@ -556,7 +562,7 @@ def test_ajax_queue_selected_targets_returns_json(tmp_path):
     payload = response.get_json()
     assert payload["status"] == "queued"
     assert payload["job_count"] == 2
-    assert "Queued 2 target(s)" in payload["message"]
+    assert payload["message"] == "Queued 2 commands: CLOC, PMD."
 
 
 def test_ajax_queue_target_validation_error_returns_json(tmp_path):

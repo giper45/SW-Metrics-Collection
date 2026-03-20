@@ -86,6 +86,31 @@ def test_discover_make_targets_splits_software_metrics_and_vulnerabilities(tmp_p
     assert targets["collect-all"] == "Pipelines"
 
 
+def test_discover_make_targets_formats_display_names(tmp_path: Path):
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text(
+        "\n".join(
+            [
+                "collect-loc-cloc:",
+                "\t@echo loc",
+                "",
+                "collect-vulnerability-codeql-java:",
+                "\t@echo vuln",
+                "",
+                "collect-class-count-javaparser:",
+                "\t@echo classes",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    targets = {target.name: target.display_name for target in discover_make_targets(makefile_path)}
+
+    assert targets["collect-loc-cloc"] == "CLOC"
+    assert targets["collect-vulnerability-codeql-java"] == "CodeQL"
+    assert targets["collect-class-count-javaparser"] == "JavaParser (Class Count)"
+
+
 def test_group_targets_places_preparation_first(tmp_path: Path):
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text(

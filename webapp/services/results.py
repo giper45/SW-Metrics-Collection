@@ -12,6 +12,38 @@ SOURCE_LABELS = {
     "raw": "Raw Collection",
     "normalized": "Normalized Output",
 }
+TOOL_LABELS = {
+    "cloc": "CLOC",
+    "codeql": "CodeQL",
+    "ckjm": "CKJM",
+    "ckjm-ext": "CKJM Extended",
+    "dependency-check": "Dependency-Check",
+    "findsecbugs": "FindSecBugs",
+    "grype": "Grype",
+    "lizard": "Lizard",
+    "osv-scanner": "OSV-Scanner",
+    "pmd": "PMD",
+    "semgrep": "Semgrep",
+    "spotbugs": "SpotBugs",
+    "syft": "Syft",
+    "tokei": "Tokei",
+}
+TOOL_BADGES = {
+    "cloc": "primary",
+    "codeql": "dark",
+    "ckjm": "secondary",
+    "ckjm-ext": "secondary",
+    "dependency-check": "warning",
+    "findsecbugs": "warning",
+    "grype": "danger",
+    "lizard": "warning",
+    "osv-scanner": "dark",
+    "pmd": "danger",
+    "semgrep": "success",
+    "spotbugs": "warning",
+    "syft": "secondary",
+    "tokei": "info",
+}
 VULNERABILITY_METRIC = "vulnerability-findings"
 MAX_METRIC_ROWS = 250
 MAX_VULNERABILITY_CARDS = 60
@@ -210,6 +242,8 @@ def build_vulnerability_view(
             "rules": unique_rules,
             "cwes": unique_cwes,
             "truncated": truncated_count,
+            "tools": len({str(row.get("tool", "")).strip() for row in filtered_rows if row.get("tool")}),
+            "tool_names": _option_values(filtered_rows, "tool"),
             "severity_breakdown": dict(severity_breakdown),
         },
     }
@@ -268,6 +302,7 @@ def build_metrics_view(
                 "submetric": str(measure_rows[0].get("submetric", "")).strip(),
                 "rows": len(measure_rows),
                 "tools": len({str(row.get("tool", "")).strip() for row in measure_rows if row.get("tool")}),
+                "tool_names": _option_values(measure_rows, "tool"),
                 "components": len({str(row.get("component", "")).strip() for row in measure_rows if row.get("component")}),
                 "latest_timestamp": max(str(row.get("timestamp_utc", "")) for row in measure_rows),
                 "min_value": min(numeric_values) if numeric_values else None,
@@ -310,6 +345,7 @@ def build_metrics_view(
             "metrics": len({str(row.get("metric", "")).strip() for row in filtered_rows if row.get("metric")}),
             "components": len({str(row.get("component", "")).strip() for row in filtered_rows if row.get("component")}),
             "tools": len({str(row.get("tool", "")).strip() for row in filtered_rows if row.get("tool")}),
+            "tool_names": _option_values(filtered_rows, "tool"),
         },
     }
 
@@ -325,6 +361,20 @@ def preferred_source(rows: list[dict[str, Any]]) -> str:
 
 def source_label(source_key: str) -> str:
     return SOURCE_LABELS.get(source_key, source_key)
+
+
+def tool_label(tool_name: str) -> str:
+    normalized = str(tool_name or "").strip()
+    if not normalized:
+        return "Unknown tool"
+    return TOOL_LABELS.get(normalized.lower(), normalized)
+
+
+def tool_badge(tool_name: str) -> str:
+    normalized = str(tool_name or "").strip().lower()
+    if not normalized:
+        return "secondary"
+    return TOOL_BADGES.get(normalized, "secondary")
 
 
 def severity_badge(severity: str) -> str:

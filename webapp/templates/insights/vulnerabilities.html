@@ -91,7 +91,7 @@
                         <select class="form-select" id="tool" name="tool">
                             <option value="">All tools</option>
                             {% for tool in view_data.options.tools %}
-                                <option value="{{ tool }}"{% if view_data.filters.tool == tool %} selected{% endif %}>{{ tool }}</option>
+                                <option value="{{ tool }}"{% if view_data.filters.tool == tool %} selected{% endif %}>{{ tool_label(tool) }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -187,6 +187,19 @@
             </div>
         </div>
 
+        {% if view_data.summary.tool_names %}
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <span class="fw-semibold">Scanners in view</span>
+                        {% for tool in view_data.summary.tool_names %}
+                            <span class="badge text-bg-{{ tool_badge(tool) }}">{{ tool_label(tool) }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-body">
                 <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -210,13 +223,14 @@
                                 <div>
                                     <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
                                         <span class="badge text-bg-dark">{{ row.project }}</span>
+                                        <span class="badge text-bg-{{ tool_badge(row.tool) }}">{{ tool_label(row.tool) }}</span>
                                         <span class="badge text-bg-light border">{{ row.component_type }}</span>
                                         <span class="badge text-bg-{{ severity_badge(entry.top_severity) }}">{{ entry.top_severity|title }}</span>
                                         <span class="badge text-bg-secondary">{{ source_label(row._source) }}</span>
                                     </div>
                                     <h2 class="h4 mb-1">{{ row.component }}</h2>
                                     <div class="text-body-secondary">
-                                        {{ row.tool }} · {{ row.variant }} · run {{ row.run_id }}
+                                        {{ row.variant }}{% if row.tool_version %} · version {{ row.tool_version }}{% endif %} · run {{ row.run_id }}
                                     </div>
                                 </div>
                                 <div class="text-end">
@@ -258,6 +272,15 @@
                                                         {% endif %}
                                                         {% if finding.method_name %}
                                                             <span> · {{ finding.method_name }}()</span>
+                                                        {% endif %}
+                                                    </div>
+                                                    <div class="d-flex gap-2 flex-wrap mt-3">
+                                                        <span class="badge text-bg-{{ tool_badge(row.tool) }}">Detected by {{ tool_label(row.tool) }}</span>
+                                                        {% if row.tool_version %}
+                                                            <span class="badge text-bg-light border">v{{ row.tool_version }}</span>
+                                                        {% endif %}
+                                                        {% if row.variant %}
+                                                            <span class="badge text-bg-light border">{{ row.variant }}</span>
                                                         {% endif %}
                                                     </div>
                                                 </div>
