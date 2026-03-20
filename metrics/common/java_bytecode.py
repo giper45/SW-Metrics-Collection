@@ -7,6 +7,7 @@ import os
 from typing import Iterable
 
 from input_manager import discover_module_class_files
+from java_layout import resolve_java_module_layout
 
 
 def unique_paths(paths: Iterable[str]) -> list[str]:
@@ -22,17 +23,8 @@ def unique_paths(paths: Iterable[str]) -> list[str]:
 
 
 def candidate_bytecode_search_roots(module_path: str, project_path: str) -> list[str]:
-    roots = [module_path]
-    module_name = os.path.basename(os.path.normpath(module_path)).lower()
-    module_parent = os.path.normpath(os.path.dirname(os.path.normpath(module_path)))
-    project_norm = os.path.normpath(project_path)
-
-    # Maven mono-module repositories often have sources in "<repo>/src"
-    # and bytecode in "<repo>/target/classes".
-    if module_name in {"src", "source"} and module_parent == project_norm:
-        roots.append(project_path)
-
-    return unique_paths(roots)
+    layout = resolve_java_module_layout(module_path, project_path)
+    return unique_paths(list(layout.bytecode_search_roots))
 
 
 def discover_module_class_files_with_roots(

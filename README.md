@@ -19,10 +19,10 @@ Public repository: [https://github.com/giper45/SW-Metrics-Collection](https://gi
 | Maintainability | Maintainability Index (+ Halstead aggregates) | `mi-halstead-java` |
 | Quality | Static warnings | `static-warnings-checkstyle` |
 | Testing | Coverage ratio | `coverage-jacoco` |
-| Vulnerability | Vulnerability findings | `vulnerability-spotbugs-findsecbugs`, `vulnerability-dependency-check`, `vulnerability-codeql-java`, `vulnerability-pmd-security` |
+| Vulnerability | Vulnerability findings | `vulnerability-spotbugs-findsecbugs`, `vulnerability-dependency-check`, `vulnerability-codeql-java`, `vulnerability-pmd-security`, `vulnerability-pmd-jsp-security` |
 | Evolution | Code churn | `churn-git` |
 
-Implemented metric containers: **19**.
+Implemented metric containers: **20**.
 
 For vulnerability collectors, the raw interchange contract is **SARIF 2.1.0**.
 Scanners that already support SARIF emit it natively; scanners with non-SARIF native
@@ -41,7 +41,7 @@ The canonical pipeline output remains JSONL, while secondary SARIF artifacts are
 - `metrics/maintainability/java/`
 - `metrics/quality/java/`
 - `metrics/testing/java/`
-- `metrics/vulnerability/java/`
+- `metrics/vulnerability/java/`, `metrics/vulnerability/web/`
 - `metrics/evolution/generic/`
 - `metrics/validate-results/generic/jsonl-schema-validator/`
 - `metrics/generic/normalized-collector/`
@@ -138,6 +138,7 @@ make collect-coverage-jacoco
 make collect-vulnerability-dependency-check
 make collect-vulnerability-codeql-java
 make collect-vulnerability-pmd-security
+make collect-vulnerability-pmd-jsp-security
 make collect-vulnerability-spotbugs-findsecbugs
 make normalize-vulnerability-sarif
 make collect-churn-git
@@ -147,8 +148,19 @@ Note: `collect-vulnerability-codeql-java` is forced to `linux/amd64` because the
 CodeQL Linux bundle is currently distributed as `linux64` only.
 The container defaults to conservative CodeQL settings (`CODEQL_THREADS=2`, `CODEQL_RAM_MB=4096`)
 to keep analysis stable under emulation; override them if you need different limits.
+The Java collector also supports `CODEQL_JAVA_BUILD_MODE`, `CODEQL_JAVA_BUILD_COMMAND`,
+`CODEQL_JAVA_EXTRACTOR_OPTIONS`, and `CODEQL_JAVA_USE_PREPARED_BYTECODE`. Its default
+`auto` mode will use a repository-root build context for layouts such as BodgeIt where
+`build.xml` sits above the `src/` tree, and can reuse `.class` files produced by
+`make prepare-java-bytecode`.
+For experimental extractor behavior, you can also pass `CODEQL_EXTRACTOR_JAVA_JSP=true`
+to the CodeQL container, but this should be treated as best-effort rather than stable support.
 For a lighter offline Java SAST pass, `collect-vulnerability-pmd-security` uses PMD's
-built-in `category/java/security.xml` ruleset.
+built-in `category/java/security.xml` ruleset, while `collect-vulnerability-pmd-jsp-security`
+uses PMD's `category/jsp/security.xml` ruleset for JSP templates.
+Collector containers now run with the host user's `UID:GID` by default, so files written
+under `results/` stay deletable without `sudo`. Older root-owned outputs can be repaired with
+`make repair-output-permissions`.
 `make normalize-vulnerability-sarif` creates canonical normalized SARIF only for missing
 vulnerability artifacts, reusing raw SARIF when available and falling back to embedded JSONL findings otherwise.
 

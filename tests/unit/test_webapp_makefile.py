@@ -97,6 +97,9 @@ def test_discover_make_targets_formats_display_names(tmp_path: Path):
                 "collect-vulnerability-codeql-java:",
                 "\t@echo vuln",
                 "",
+                "collect-vulnerability-pmd-jsp-security:",
+                "\t@echo jsp vuln",
+                "",
                 "collect-class-count-javaparser:",
                 "\t@echo classes",
             ]
@@ -108,6 +111,7 @@ def test_discover_make_targets_formats_display_names(tmp_path: Path):
 
     assert targets["collect-loc-cloc"] == "CLOC"
     assert targets["collect-vulnerability-codeql-java"] == "CodeQL"
+    assert targets["collect-vulnerability-pmd-jsp-security"] == "PMD (JSP)"
     assert targets["collect-class-count-javaparser"] == "JavaParser (Class Count)"
 
 

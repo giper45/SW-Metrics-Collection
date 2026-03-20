@@ -3,6 +3,9 @@ RESULTS_DIR := $(PWD)/results
 RESULTS_NORMALIZED_DIR := $(PWD)/results_normalized
 ANALYSIS_OUT_DIR := $(PWD)/analysis_out
 JAVA_BUILDER_DIR := $(PWD)/metrics/java-builder
+METRIC_CONTAINER_UID ?= $(shell id -u)
+METRIC_CONTAINER_GID ?= $(shell id -g)
+METRIC_CONTAINER_HOME ?= /tmp
 CASE_STUDY_RUN_ID := $(if $(METRIC_RUN_ID),$(METRIC_RUN_ID),$(shell python3 -c 'import uuid; print(uuid.uuid4())'))
 EXPERIMENT_RUN_ID := $(CASE_STUDY_RUN_ID)
 METRIC_RESOURCE_TRACKING ?= 0
@@ -11,12 +14,24 @@ METRIC_RESOURCE_REPORT ?= $(ANALYSIS_OUT_DIR)/metric-runtime-$(CASE_STUDY_RUN_ID
 JAVA_BUILD_BYTECODE ?= 1
 JAVA_BUILD_STRICT ?= 0
 JAVA_BUILD_FORCE ?= 0
-DOCKER_RUN_METRIC_BASE := docker run --rm -e METRIC_RUN_ID=$(CASE_STUDY_RUN_ID) -v $(SRC_DIR):/app:ro -v $(RESULTS_DIR):/results
+DOCKER_RUN_USER_FLAGS := --user $(METRIC_CONTAINER_UID):$(METRIC_CONTAINER_GID) -e HOME=$(METRIC_CONTAINER_HOME)
+DOCKER_RUN_METRIC_BASE := docker run --rm $(DOCKER_RUN_USER_FLAGS) -e METRIC_RUN_ID=$(CASE_STUDY_RUN_ID) -v $(SRC_DIR):/app:ro -v $(RESULTS_DIR):/results
 DOCKER_RUN_METRIC := python3 -m analysis.metric_runtime_monitor --run-id $(CASE_STUDY_RUN_ID) --results-dir $(RESULTS_DIR) --enabled $(METRIC_RESOURCE_TRACKING) --sample-interval-sec $(METRIC_RESOURCE_SAMPLE_SEC) --out $(METRIC_RESOURCE_REPORT) -- $(DOCKER_RUN_METRIC_BASE)
 DOCKER_BUILD_METRIC := DOCKER_BUILDKIT=1 docker build --build-context repo_common=$(PWD)/metrics/common
-DOCKER_RUN_METRIC_AMD64_BASE := docker run --platform=linux/amd64 --rm -e METRIC_RUN_ID=$(CASE_STUDY_RUN_ID) -v $(SRC_DIR):/app:ro -v $(RESULTS_DIR):/results
+DOCKER_RUN_METRIC_AMD64_BASE := docker run --platform=linux/amd64 --rm $(DOCKER_RUN_USER_FLAGS) -e METRIC_RUN_ID=$(CASE_STUDY_RUN_ID) -v $(SRC_DIR):/app:ro -v $(RESULTS_DIR):/results
 DOCKER_RUN_METRIC_AMD64 := python3 -m analysis.metric_runtime_monitor --run-id $(CASE_STUDY_RUN_ID) --results-dir $(RESULTS_DIR) --enabled $(METRIC_RESOURCE_TRACKING) --sample-interval-sec $(METRIC_RESOURCE_SAMPLE_SEC) --out $(METRIC_RESOURCE_REPORT) -- $(DOCKER_RUN_METRIC_AMD64_BASE)
 DOCKER_BUILD_METRIC_AMD64 := DOCKER_BUILDKIT=1 docker build --platform=linux/amd64 --build-context repo_common=$(PWD)/metrics/common
+CODEQL_DOCKER_ENV := \
+	$(if $(CODEQL_THREADS),-e CODEQL_THREADS=$(CODEQL_THREADS),) \
+	$(if $(CODEQL_RAM_MB),-e CODEQL_RAM_MB=$(CODEQL_RAM_MB),) \
+	$(if $(CODEQL_JAVA_QUERY_SUITE),-e CODEQL_JAVA_QUERY_SUITE=$(CODEQL_JAVA_QUERY_SUITE),) \
+	$(if $(CODEQL_JAVA_BUILD_MODE),-e CODEQL_JAVA_BUILD_MODE=$(CODEQL_JAVA_BUILD_MODE),) \
+	$(if $(CODEQL_JAVA_BUILD_COMMAND),-e CODEQL_JAVA_BUILD_COMMAND=$(CODEQL_JAVA_BUILD_COMMAND),) \
+	$(if $(CODEQL_JAVA_EXTRACTOR_OPTIONS),-e CODEQL_JAVA_EXTRACTOR_OPTIONS=$(CODEQL_JAVA_EXTRACTOR_OPTIONS),) \
+	$(if $(CODEQL_JAVA_USE_PREPARED_BYTECODE),-e CODEQL_JAVA_USE_PREPARED_BYTECODE=$(CODEQL_JAVA_USE_PREPARED_BYTECODE),) \
+	$(if $(CODEQL_DATABASE_CREATE_ARGS),-e CODEQL_DATABASE_CREATE_ARGS=$(CODEQL_DATABASE_CREATE_ARGS),) \
+	$(if $(CODEQL_DATABASE_ANALYZE_ARGS),-e CODEQL_DATABASE_ANALYZE_ARGS=$(CODEQL_DATABASE_ANALYZE_ARGS),) \
+	$(if $(CODEQL_EXTRACTOR_JAVA_JSP),-e CODEQL_EXTRACTOR_JAVA_JSP=$(CODEQL_EXTRACTOR_JAVA_JSP),)
 
 .PHONY: \
 	collect-loc-cloc \
@@ -38,6 +53,7 @@ DOCKER_BUILD_METRIC_AMD64 := DOCKER_BUILDKIT=1 docker build --platform=linux/amd
 	collect-vulnerability-dependency-check \
 	collect-vulnerability-codeql-java \
 	collect-vulnerability-pmd-security \
+	collect-vulnerability-pmd-jsp-security \
 	collect-vulnerability-spotbugs-findsecbugs \
 	collect-churn-git \
 	collect-size-all \
@@ -49,6 +65,7 @@ DOCKER_BUILD_METRIC_AMD64 := DOCKER_BUILDKIT=1 docker build --platform=linux/amd
 	collect-all \
 	prepare-java-bytecode \
 	prepare-java-bytecode-if-enabled \
+	repair-output-permissions \
 	clean-case-study \
 	print-case-study \
 	case-study \
@@ -184,13 +201,19 @@ collect-vulnerability-codeql-java:
 	@# Build the CodeQL collector image for linux/amd64.
 	$(DOCKER_BUILD_METRIC_AMD64) -t vulnerability-codeql-java:latest metrics/vulnerability/java/vulnerability-codeql-java
 	@# Run the CodeQL collector on an amd64 container against the repositories in src/.
-	$(DOCKER_RUN_METRIC_AMD64) vulnerability-codeql-java:latest
+	$(DOCKER_RUN_METRIC_AMD64) $(CODEQL_DOCKER_ENV) vulnerability-codeql-java:latest
 
 collect-vulnerability-pmd-security:
 	@# Build the PMD security collector image.
 	$(DOCKER_BUILD_METRIC) -t vulnerability-pmd-security:latest metrics/vulnerability/java/vulnerability-pmd-security
 	@# Run the PMD security collector against the repositories mounted under src/.
 	$(DOCKER_RUN_METRIC) vulnerability-pmd-security:latest
+
+collect-vulnerability-pmd-jsp-security:
+	@# Build the PMD JSP security collector image.
+	$(DOCKER_BUILD_METRIC) -t vulnerability-pmd-jsp-security:latest metrics/vulnerability/web/vulnerability-pmd-jsp-security
+	@# Run the PMD JSP security collector against the repositories mounted under src/.
+	$(DOCKER_RUN_METRIC) vulnerability-pmd-jsp-security:latest
 
 collect-vulnerability-spotbugs-findsecbugs:
 	@# Build the SpotBugs/FindSecBugs collector image.
@@ -208,7 +231,7 @@ collect-size-all: collect-loc-cloc collect-loc-tokei collect-loc-scc collect-cla
 collect-complexity-all: collect-cc-lizard collect-cc-ck
 collect-coupling-all: collect-ce-ca-jdepend collect-ce-ca-ck-cbo
 collect-cohesion-all: collect-lcom-ck collect-lcom-ckjm
-collect-vulnerability-all: collect-vulnerability-dependency-check collect-vulnerability-codeql-java collect-vulnerability-pmd-security collect-vulnerability-spotbugs-findsecbugs
+collect-vulnerability-all: collect-vulnerability-dependency-check collect-vulnerability-codeql-java collect-vulnerability-pmd-security collect-vulnerability-pmd-jsp-security collect-vulnerability-spotbugs-findsecbugs
 collect-paper-extras: collect-duplication-jscpd collect-mi-halstead-java collect-coverage-jacoco
 
 prepare-java-bytecode:
@@ -222,6 +245,10 @@ prepare-java-bytecode-if-enabled:
 	else \
 		echo "Skipping Java bytecode build (set JAVA_BUILD_BYTECODE=1 to enable)"; \
 	fi
+
+repair-output-permissions:
+	@# Reassign output ownership to the current host user after older root-owned container runs.
+	docker run --rm -v $(PWD):/workspace alpine:3.22 sh -lc 'mkdir -p /workspace/results /workspace/results_normalized /workspace/analysis_out && chown -R $(METRIC_CONTAINER_UID):$(METRIC_CONTAINER_GID) /workspace/results /workspace/results_normalized /workspace/analysis_out'
 
 clean-experiment:
 	@# Remove previous raw, normalized, and analysis outputs.
@@ -256,6 +283,7 @@ print-experiment:
 	@printf "%-35s %-55s %s\n" "vulnerability-dependency-check:latest" "metrics/vulnerability/java/vulnerability-dependency-check" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-codeql-java:latest" "metrics/vulnerability/java/vulnerability-codeql-java" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-pmd-security:latest" "metrics/vulnerability/java/vulnerability-pmd-security" "vulnerability-findings"
+	@printf "%-35s %-55s %s\n" "vulnerability-pmd-jsp-security:latest" "metrics/vulnerability/web/vulnerability-pmd-jsp-security" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-spotbugs-findsecbugs:latest" "metrics/vulnerability/java/vulnerability-spotbugs-findsecbugs" "vulnerability-findings"
 
 print-run-id:
@@ -274,7 +302,7 @@ manifest:
 		--out $(RESULTS_DIR)/manifest-$(CASE_STUDY_RUN_ID).json \
 		--primary-component-type file \
 		--language java \
-		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,class-count:javaparser:javaparser-default,package-count:javaparser:javaparser-default,cc:lizard:lizard-default,wmc:ck:ck-raw,nom:ck:ck-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,lcom:ck:ck-default,lcom:ckjm:ckjm-default,vulnerability-findings:dependency-check:dependency-check-default,vulnerability-findings:codeql:codeql-java-security-extended,vulnerability-findings:pmd:pmd-java-security,vulnerability-findings:spotbugs:spotbugs-findsecbugs-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,test-coverage:jacoco:jacoco-default'
+		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,class-count:javaparser:javaparser-default,package-count:javaparser:javaparser-default,cc:lizard:lizard-default,wmc:ck:ck-raw,nom:ck:ck-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,lcom:ck:ck-default,lcom:ckjm:ckjm-default,vulnerability-findings:dependency-check:dependency-check-default,vulnerability-findings:codeql:codeql-java-security-extended,vulnerability-findings:pmd:pmd-java-security,vulnerability-findings:pmd:pmd-jsp-security,vulnerability-findings:spotbugs:spotbugs-findsecbugs-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,test-coverage:jacoco:jacoco-default'
 
 normalize:
 	@# Normalize raw metric outputs into the shared JSONL schema.
