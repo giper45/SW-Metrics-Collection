@@ -55,6 +55,25 @@ def test_normalize_results_derives_cc_and_instability(tmp_path: Path):
     assert instability_row["source_file"] == "sample.jsonl"
 
 
+def test_normalize_results_preserves_nested_result_layout(tmp_path: Path):
+    module = load_module(NORMALIZE_PATH, "analysis_normalize_nested_layout")
+    input_dir = tmp_path / "results"
+    output_dir = tmp_path / "results_normalized"
+    nested_input = input_dir / "software-metrics" / "jsonl" / "sample.jsonl"
+    nested_input.parent.mkdir(parents=True, exist_ok=True)
+    nested_input.write_text(
+        (
+            '{"schema_version":"1.0","run_id":"11111111-1111-4111-8111-111111111111","project":"repo-a","metric":"loc","variant":"cloc-default","component_type":"file","component":"src/A.java","status":"ok","value":10.0,"tool":"cloc","tool_version":"1.0","parameters":{},"timestamp_utc":"2026-02-24T15:04:05Z"}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    summary = module.normalize_results(input_dir, output_dir)
+
+    assert summary["files"] == 1
+    assert (output_dir / "software-metrics" / "jsonl" / "sample.jsonl").is_file()
+
+
 def test_normalize_results_derives_zero_cc_when_nom_is_zero(tmp_path: Path):
     module = load_module(NORMALIZE_PATH, "analysis_normalize_nom_zero")
     output_dir = tmp_path / "results_normalized"

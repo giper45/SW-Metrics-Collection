@@ -25,6 +25,10 @@ package "Metric Containers (Docker)" {
   [churn-git\n(metrics/evolution/generic/churn-git)] as C_CHURN_GIT
 
   [duplication-jscpd\n(metrics/duplication/java/duplication-jscpd)] as C_DUP_JSCPD
+  [vulnerability-dependency-check\n(metrics/vulnerability/java/vulnerability-dependency-check)] as C_VULN_DC
+  [vulnerability-codeql-java\n(metrics/vulnerability/java/vulnerability-codeql-java)] as C_VULN_CODEQL
+  [vulnerability-pmd-security\n(metrics/vulnerability/java/vulnerability-pmd-security)] as C_VULN_PMD
+  [vulnerability-spotbugs-findsecbugs\n(metrics/vulnerability/java/vulnerability-spotbugs-findsecbugs)] as C_VULN_SPOTBUGS
 }
 
 ' --- Normalized data layer ---
@@ -51,6 +55,10 @@ C_HAL_JAVANCSS --> D_NORM
 C_HAL_RADON --> D_NORM
 C_CHURN_GIT --> D_NORM
 C_DUP_JSCPD --> D_NORM
+C_VULN_DC --> D_NORM
+C_VULN_CODEQL --> D_NORM
+C_VULN_PMD --> D_NORM
+C_VULN_SPOTBUGS --> D_NORM
 
 ' --- Derived dependencies ---
 D_NORM --> M_INSTABILITY : needs Ca, Ce

@@ -1,5 +1,5 @@
 @startuml
-title SW Metrics Collection - System Context (2026-02-27)
+title MAVIS - System Context (2026-02-27)
 skinparam componentStyle rectangle
 skinparam shadowing false
 

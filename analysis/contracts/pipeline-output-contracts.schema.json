@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sw-metrics-collection.local/schemas/pipeline-output-contracts.schema.json",
-  "title": "SW Metrics Collection - Pipeline Output Contracts",
+  "title": "MAVIS - Pipeline Output Contracts",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -203,7 +203,7 @@
           "const": "jsonl"
         },
         "path_pattern": {
-          "const": "/results/<project>-<timestamp_utc>-<metric>-<tool>-<variant>.jsonl"
+          "const": "/results/<category>/jsonl/<project>-<timestamp_utc>-<metric>-<tool>-<variant>.jsonl"
         },
         "rows": {
           "type": "array",
@@ -409,7 +409,7 @@
           "const": "jsonl"
         },
         "path_pattern": {
-          "const": "/results_normalized/<project>-<timestamp_utc>-<metric>-<tool>-<variant>.jsonl"
+          "const": "/results_normalized/<category>/jsonl/<project>-<timestamp_utc>-<metric>-<tool>-<variant>.jsonl"
         },
         "rows": {
           "type": "array",

@@ -22,4 +22,19 @@ def test_metric_output_path():
         "cloc",
         "default",
     )
-    assert path.endswith("/results/repo-a-2026-03-01T10:00:00Z-loc-cloc-default.jsonl")
+    assert path.endswith("/results/software-metrics/jsonl/repo-a-2026-03-01T10:00:00Z-loc-cloc-default.jsonl")
+
+
+def test_metric_output_path_uses_vulnerability_subtree():
+    module = load_module(REPO_ROOT / "metrics/common/utils.py")
+    path = module.metric_output_path(
+        "/results",
+        "repo-a",
+        "2026-03-01T10:00:00Z",
+        "vulnerability-findings",
+        "spotbugs",
+        "spotbugs-findsecbugs-default",
+    )
+    assert path.endswith(
+        "/results/vulnerabilities/jsonl/repo-a-2026-03-01T10:00:00Z-vulnerability-findings-spotbugs-spotbugs-findsecbugs-default.jsonl"
+    )

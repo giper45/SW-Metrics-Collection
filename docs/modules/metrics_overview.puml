@@ -39,6 +39,15 @@ package "metrics" {
     }
   }
 
+  package "vulnerability" {
+    package "java" {
+      [vulnerability-dependency-check] as vuln_depcheck <<container>>
+      [vulnerability-codeql-java] as vuln_codeql <<container>>
+      [vulnerability-pmd-security] as vuln_pmd <<container>>
+      [vulnerability-spotbugs-findsecbugs] as vuln_spotbugs <<container>>
+    }
+  }
+
   package "paper extras" {
     [duplication-jscpd] as dup <<container>>
     [mi-halstead-java] as mi <<container>>
@@ -64,6 +73,10 @@ package "metrics" {
 repo_common ..> loc_cloc
 repo_common ..> cc_lizard
 repo_common ..> ce_ca_jdepend
+repo_common ..> vuln_depcheck
+repo_common ..> vuln_codeql
+repo_common ..> vuln_pmd
+repo_common ..> vuln_spotbugs
 repo_common ..> validator
 
 ' ---- IO contracts (all containers read /app and write /results) ----
@@ -90,6 +103,15 @@ lcom_ck --> app
 lcom_ck --> results
 lcom_ckjm --> app
 lcom_ckjm --> results
+
+vuln_depcheck --> app
+vuln_depcheck --> results
+vuln_codeql --> app
+vuln_codeql --> results
+vuln_pmd --> app
+vuln_pmd --> results
+vuln_spotbugs --> app
+vuln_spotbugs --> results
 
 dup --> app
 dup --> results

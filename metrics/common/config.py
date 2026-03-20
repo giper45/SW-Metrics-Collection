@@ -61,6 +61,7 @@ JAVA_BYTECODE_DIR_CANDIDATES = _env_tuple(
         "build/classes/java/main",
         "build/classes/kotlin/main",
         "build/classes",
+        "build/WEB-INF/classes",
         "out/production",
     ),
 )
@@ -96,4 +97,3 @@ GENERIC_SOURCE_EXTENSIONS = _normalize_extensions(
         },
     )
 )
-

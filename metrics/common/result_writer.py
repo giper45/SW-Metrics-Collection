@@ -10,6 +10,7 @@ import os
 import subprocess
 import uuid
 from collections import OrderedDict
+from pathlib import Path
 
 from common_types import MetricRow, RowCustomiser
 from data_manager import apply_row_customiser, is_finite_number, is_number, normalize_row_scalars
@@ -238,6 +239,7 @@ def write_jsonl_rows(
     row_customiser: RowCustomiser | None = None,
 ):
     """Validate/enrich rows and write canonical JSONL output."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     metadata_cache = {}
     prepared = apply_row_customiser(
         [

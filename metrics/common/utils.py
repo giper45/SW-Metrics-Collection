@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from config import TEST_DIR_NAMES as DEFAULT_TEST_DIR_NAMES, VENDOR_DIRS as DEFAULT_VENDOR_DIRS
 from data_manager import read_csv_rows
 from input_manager import choose_first_existing_dir, list_source_files
+from result_layout import metric_output_path
 
 JAVA_SOURCE_EXTENSIONS = {".java"}
 JAVA_INPUT_DIR_CANDIDATES = ("main/java", "src/main/java")
@@ -55,10 +56,3 @@ def resolve_output_file_path(out_dir, filename):
 
 def read_csv_rows_lowercase(path):
     return read_csv_rows(path, lowercase_columns=True)
-
-
-def metric_output_path(results_dir, project, timestamp, metric_name, tool_name, variant_name):
-    return os.path.join(
-        results_dir,
-        f"{project}-{timestamp}-{metric_name}-{tool_name}-{variant_name}.jsonl",
-    )

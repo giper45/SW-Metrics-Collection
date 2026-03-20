@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
  
 ## [0.6] - 2026-03-02
 
+### Added
+- Java vulnerability metric integration via `vulnerability-spotbugs-findsecbugs`, with shared SAST finding normalization for future multi-tool compatibility.
+- Additional vulnerability collectors for `vulnerability-dependency-check` and `vulnerability-codeql-java`, both normalized through the shared SARIF vulnerability schema.
+
 ### Changed
 - Refactor some code in the agreement module. 
 - Fix compilation guava bugs in the preprocess-bytecode. 
