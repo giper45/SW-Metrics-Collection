@@ -37,6 +37,7 @@ DOCKER_BUILD_METRIC_AMD64 := DOCKER_BUILDKIT=1 docker build --platform=linux/amd
 	collect-coverage-jacoco \
 	collect-vulnerability-dependency-check \
 	collect-vulnerability-codeql-java \
+	collect-vulnerability-psalm-php \
 	collect-vulnerability-pmd-security \
 	collect-vulnerability-spotbugs-findsecbugs \
 	collect-churn-git \
@@ -186,6 +187,12 @@ collect-vulnerability-codeql-java:
 	@# Run the CodeQL collector on an amd64 container against the repositories in src/.
 	$(DOCKER_RUN_METRIC_AMD64) vulnerability-codeql-java:latest
 
+collect-vulnerability-psalm-php:
+	@# Build the Psalm collector image.
+	$(DOCKER_BUILD_METRIC) -t vulnerability-psalm-php:latest metrics/vulnerability/php/vulnerability-psalm-php
+	@# Run the Psalm collector against the repositories mounted under src/.
+	$(DOCKER_RUN_METRIC) vulnerability-psalm-php:latest
+
 collect-vulnerability-pmd-security:
 	@# Build the PMD security collector image.
 	$(DOCKER_BUILD_METRIC) -t vulnerability-pmd-security:latest metrics/vulnerability/java/vulnerability-pmd-security
@@ -208,7 +215,7 @@ collect-size-all: collect-loc-cloc collect-loc-tokei collect-loc-scc collect-cla
 collect-complexity-all: collect-cc-lizard collect-cc-ck
 collect-coupling-all: collect-ce-ca-jdepend collect-ce-ca-ck-cbo
 collect-cohesion-all: collect-lcom-ck collect-lcom-ckjm
-collect-vulnerability-all: collect-vulnerability-dependency-check collect-vulnerability-codeql-java collect-vulnerability-pmd-security collect-vulnerability-spotbugs-findsecbugs
+collect-vulnerability-all: collect-vulnerability-dependency-check collect-vulnerability-codeql-java collect-vulnerability-psalm-php collect-vulnerability-pmd-security collect-vulnerability-spotbugs-findsecbugs
 collect-paper-extras: collect-duplication-jscpd collect-mi-halstead-java collect-coverage-jacoco
 
 prepare-java-bytecode:
@@ -255,6 +262,7 @@ print-experiment:
 	@printf "%-35s %-55s %s\n" "coverage-jacoco:latest" "metrics/testing/java/coverage-jacoco" "test-coverage"
 	@printf "%-35s %-55s %s\n" "vulnerability-dependency-check:latest" "metrics/vulnerability/java/vulnerability-dependency-check" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-codeql-java:latest" "metrics/vulnerability/java/vulnerability-codeql-java" "vulnerability-findings"
+	@printf "%-35s %-55s %s\n" "vulnerability-psalm-php:latest" "metrics/vulnerability/php/vulnerability-psalm-php" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-pmd-security:latest" "metrics/vulnerability/java/vulnerability-pmd-security" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-spotbugs-findsecbugs:latest" "metrics/vulnerability/java/vulnerability-spotbugs-findsecbugs" "vulnerability-findings"
 

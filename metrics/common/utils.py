@@ -10,6 +10,7 @@ from input_manager import choose_first_existing_dir, list_source_files
 from result_layout import metric_output_path
 
 JAVA_SOURCE_EXTENSIONS = {".java"}
+PHP_SOURCE_EXTENSIONS = {".php"}
 JAVA_INPUT_DIR_CANDIDATES = ("main/java", "src/main/java")
 
 
@@ -28,6 +29,18 @@ def find_java_sources(module_path, *, vendor_dirs=None, test_dir_names=None):
         test_dir_names=DEFAULT_TEST_DIR_NAMES if test_dir_names is None else test_dir_names,
         test_file_markers=(),
         source_extensions=JAVA_SOURCE_EXTENSIONS,
+    )
+
+
+def find_php_sources(module_path, *, vendor_dirs=None, test_dir_names=None):
+    return list_source_files(
+        module_path,
+        vendor_dirs=DEFAULT_VENDOR_DIRS if vendor_dirs is None else vendor_dirs,
+        include_tests=False,
+        test_dir_names=DEFAULT_TEST_DIR_NAMES if test_dir_names is None else test_dir_names,
+        test_file_markers=(),
+        source_extensions=PHP_SOURCE_EXTENSIONS,
+        include_hidden_files=True,
     )
 
 

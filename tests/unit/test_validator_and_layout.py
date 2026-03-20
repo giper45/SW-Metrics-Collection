@@ -17,6 +17,7 @@ REQUIRED_CONTAINERS = [
     "metrics/cohesion/java/lcom-ckjm",
     "metrics/vulnerability/java/vulnerability-dependency-check",
     "metrics/vulnerability/java/vulnerability-codeql-java",
+    "metrics/vulnerability/php/vulnerability-psalm-php",
     "metrics/vulnerability/java/vulnerability-pmd-security",
     "metrics/vulnerability/java/vulnerability-spotbugs-findsecbugs",
     "metrics/duplication/java/duplication-jscpd",

@@ -33,10 +33,43 @@
         background: var(--bs-body-bg);
     }
 
+    .feature-link {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .feature-link:hover {
+        text-decoration: none;
+    }
+
+    .feature-tile.is-focused {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.16);
+    }
+
     .flow-step {
         border: 1px solid var(--bs-border-color);
         border-radius: 1rem;
         background: var(--bs-body-bg);
+    }
+
+    .flow-step.is-focused {
+        border-color: var(--bs-danger);
+        box-shadow: 0 0 0 0.2rem rgba(var(--bs-danger-rgb), 0.16);
+    }
+
+    .flow-trace-scroll {
+        max-height: min(36rem, 72vh);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-right: 0.25rem;
+        scroll-behavior: smooth;
+    }
+
+    .flow-trace-scroll.is-focused {
+        box-shadow: 0 0 0 0.2rem rgba(var(--bs-dark-rgb), 0.12);
+        border-radius: 1rem;
     }
 
     .location-snippet {
@@ -44,9 +77,34 @@
         border-radius: 0.875rem;
         background: var(--bs-tertiary-bg);
         padding: 0.875rem 1rem;
-        white-space: pre-wrap;
-        word-break: break-word;
+        white-space: pre;
+        overflow-x: auto;
         font-size: 0.85rem;
+        line-height: 1.45;
+    }
+
+    .finding-toggle {
+        border-radius: 1rem !important;
+        box-shadow: none !important;
+        background: var(--bs-body-bg);
+    }
+
+    .finding-toggle:not(.collapsed) {
+        background: var(--bs-tertiary-bg);
+        color: inherit;
+    }
+
+    .finding-jumpbar {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--bs-body-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 1rem;
+    }
+
+    .snippet-language-badge {
+        letter-spacing: 0.02em;
     }
 </style>
 {% endblock %}
@@ -248,131 +306,247 @@
                             </div>
 
                             {% if entry.visible_findings %}
-                                <div class="border rounded-4 overflow-hidden">
+                                {% set entry_index = loop.index %}
+                                <div class="accordion d-grid gap-3" id="findings-accordion-{{ entry_index }}">
                                     {% for finding in entry.visible_findings %}
-                                        <div class="finding-list-item p-3">
-                                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                                                <div>
-                                                    <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
-                                                        <span class="badge text-bg-{{ severity_badge(finding.severity) }}">{{ finding.severity|title }}</span>
-                                                        {% if finding.rule_id %}
-                                                            <code>{{ finding.rule_id }}</code>
-                                                        {% endif %}
-                                                        {% if finding.rule_name %}
-                                                            <span class="fw-semibold">{{ finding.rule_name }}</span>
-                                                        {% endif %}
-                                                    </div>
-                                                    <div class="mb-2">{{ finding.message or "No message provided." }}</div>
-                                                    <div class="small text-body-secondary">
-                                                        {% if finding.primary_location %}
-                                                            <span>{{ finding.primary_location.display_label }}</span>
-                                                        {% endif %}
-                                                        {% if finding.class_name %}
-                                                            <span> · {{ finding.class_name }}</span>
-                                                        {% endif %}
-                                                        {% if finding.method_name %}
-                                                            <span> · {{ finding.method_name }}()</span>
-                                                        {% endif %}
-                                                    </div>
-                                                    <div class="d-flex gap-2 flex-wrap mt-3">
-                                                        <span class="badge text-bg-{{ tool_badge(row.tool) }}">Detected by {{ tool_label(row.tool) }}</span>
-                                                        {% if row.tool_version %}
-                                                            <span class="badge text-bg-light border">v{{ row.tool_version }}</span>
-                                                        {% endif %}
-                                                        {% if row.variant %}
-                                                            <span class="badge text-bg-light border">{{ row.variant }}</span>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-                                                <div class="text-end small">
-                                                    {% if finding.confidence %}
-                                                        <div class="text-body-secondary">confidence {{ finding.confidence }}</div>
-                                                    {% endif %}
-                                                </div>
-                                            </div>
-                                            {% if finding.cwe_ids or finding.owasp_tags %}
-                                                <div class="d-flex gap-2 flex-wrap mt-3">
-                                                    {% for cwe in finding.cwe_ids %}
-                                                        <span class="badge text-bg-light border">{{ cwe }}</span>
-                                                    {% endfor %}
-                                                    {% for tag in finding.owasp_tags %}
-                                                        <span class="badge text-bg-light border">{{ tag }}</span>
-                                                    {% endfor %}
-                                                </div>
-                                            {% endif %}
-
-                                            <div class="row g-3 mt-1">
-                                                <div class="col-xl-4">
-                                                    <div class="small text-uppercase text-secondary mb-2">Observed Features</div>
-                                                    <div class="d-grid gap-2">
-                                                        {% for feature in finding.feature_rows %}
-                                                            <div class="feature-tile p-3">
-                                                                <div class="small text-uppercase text-secondary">{{ feature.label }}</div>
-                                                                <div class="fw-semibold{% if not feature.available %} text-body-secondary{% endif %}">
-                                                                    {{ feature.value }}
-                                                                </div>
-                                                            </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-
-                                                <div class="col-xl-8">
-                                                    <div class="small text-uppercase text-secondary mb-2">Primary Location</div>
-                                                    {% if finding.primary_location %}
-                                                        <div class="feature-tile p-3 mb-3">
-                                                            <div class="fw-semibold">{{ finding.primary_location.display_label }}</div>
-                                                            {% if finding.primary_location.message %}
-                                                                <div class="small text-body-secondary mt-2">{{ finding.primary_location.message }}</div>
-                                                            {% endif %}
-                                                            {% if finding.primary_location.has_snippet %}
-                                                                <pre class="location-snippet mt-3"><code>{{ finding.primary_location.snippet }}</code></pre>
-                                                            {% endif %}
-                                                        </div>
-                                                    {% else %}
-                                                        <div class="feature-tile p-3 mb-3 text-body-secondary">N/A</div>
-                                                    {% endif %}
-
-                                                    <div class="small text-uppercase text-secondary mb-2">Flow Trace</div>
-                                                    {% if finding.flow_steps %}
-                                                        <div class="d-grid gap-2">
-                                                            {% for step in finding.flow_steps %}
-                                                                <div class="flow-step p-3">
-                                                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                                                                        <div>
-                                                                            <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
-                                                                                {% if step.role == "source" %}
-                                                                                    <span class="badge text-bg-success">Source</span>
-                                                                                {% elif step.role == "sink" %}
-                                                                                    <span class="badge text-bg-danger">Sink</span>
-                                                                                {% else %}
-                                                                                    <span class="badge text-bg-secondary">Step {{ loop.index }}</span>
-                                                                                {% endif %}
-                                                                                <span class="fw-semibold">{{ step.display_label }}</span>
-                                                                            </div>
-                                                                            {% if step.message %}
-                                                                                <div class="small text-body-secondary">{{ step.message }}</div>
-                                                                            {% endif %}
-                                                                        </div>
-                                                                        <div class="small text-body-secondary text-end">
-                                                                            {% if step.importance %}
-                                                                                <div>{{ step.importance }}</div>
-                                                                            {% endif %}
-                                                                            {% if step.execution_order is not none %}
-                                                                                <div>order {{ step.execution_order }}</div>
-                                                                            {% endif %}
-                                                                        </div>
-                                                                    </div>
-                                                                    {% if step.has_snippet %}
-                                                                        <pre class="location-snippet mt-3"><code>{{ step.snippet }}</code></pre>
+                                        {% set finding_index = loop.index %}
+                                        {% set finding_base_id = "finding-" ~ entry_index ~ "-" ~ finding_index %}
+                                        {% set collapse_id = finding_base_id ~ "-collapse" %}
+                                        {% set primary_anchor = finding_base_id ~ "-primary" %}
+                                        {% set flow_anchor = finding_base_id ~ "-flow" %}
+                                        {% set source_anchor = finding_base_id ~ "-flow-start" %}
+                                        {% set sink_anchor = finding_base_id ~ "-flow-end" %}
+                                        {% set single_step_flow = finding.flow_steps|length == 1 %}
+                                        <div class="accordion-item border-0 shadow-sm rounded-4 overflow-hidden">
+                                            <h3 class="accordion-header" id="{{ finding_base_id }}-heading">
+                                                <button
+                                                    class="accordion-button finding-toggle px-3 py-3{% if not loop.first %} collapsed{% endif %}"
+                                                    type="button"
+                                                    data-bs-toggle="collapse"
+                                                    data-bs-target="#{{ collapse_id }}"
+                                                    aria-expanded="{{ 'true' if loop.first else 'false' }}"
+                                                    aria-controls="{{ collapse_id }}"
+                                                >
+                                                    <div class="w-100">
+                                                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                                                            <div>
+                                                                <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+                                                                    <span class="badge text-bg-{{ severity_badge(finding.severity) }}">{{ finding.severity|title }}</span>
+                                                                    {% if finding.rule_id %}
+                                                                        <code>{{ finding.rule_id }}</code>
+                                                                    {% endif %}
+                                                                    {% if finding.rule_name %}
+                                                                        <span class="fw-semibold">{{ finding.rule_name }}</span>
                                                                     {% endif %}
                                                                 </div>
+                                                                <div class="small text-body-secondary">{{ finding.message or "No message provided." }}</div>
+                                                                <div class="small text-body-secondary mt-2">
+                                                                    {% if finding.primary_location %}
+                                                                        <span>{{ finding.primary_location.display_label }}</span>
+                                                                    {% endif %}
+                                                                    {% if finding.source_location %}
+                                                                        <span> · Source {{ finding.source_location.display_label }}</span>
+                                                                    {% endif %}
+                                                                    {% if finding.sink_location %}
+                                                                        <span> · Sink {{ finding.sink_location.display_label }}</span>
+                                                                    {% endif %}
+                                                                </div>
+                                                            </div>
+                                                            <div class="text-end small">
+                                                                {% if finding.confidence %}
+                                                                    <div class="text-body-secondary">confidence {{ finding.confidence }}</div>
+                                                                {% endif %}
+                                                                {% if finding.flow_steps %}
+                                                                    <div class="text-body-secondary mt-1">{{ finding.flow_steps|length }} step{% if finding.flow_steps|length != 1 %}s{% endif %}</div>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            </h3>
+                                            <div
+                                                id="{{ collapse_id }}"
+                                                class="accordion-collapse collapse{% if loop.first %} show{% endif %}"
+                                                aria-labelledby="{{ finding_base_id }}-heading"
+                                            >
+                                                <div class="accordion-body px-3 pb-3">
+                                                    <div class="finding-jumpbar p-2 d-flex gap-2 flex-wrap align-items-center mb-3">
+                                                        {% if finding.primary_location %}
+                                                            <a href="#{{ primary_anchor }}" class="btn btn-outline-secondary btn-sm" data-flow-jump="{{ primary_anchor }}">Primary</a>
+                                                        {% endif %}
+                                                        {% if finding.source_location %}
+                                                            <a
+                                                                href="#{{ source_anchor if finding.flow_steps else primary_anchor }}"
+                                                                class="btn btn-outline-success btn-sm"
+                                                                data-flow-jump="{{ source_anchor if finding.flow_steps else primary_anchor }}"
+                                                            >
+                                                                Source
+                                                            </a>
+                                                        {% endif %}
+                                                        {% if finding.sink_location %}
+                                                            <a
+                                                                href="#{{ (source_anchor if single_step_flow else sink_anchor) if finding.flow_steps else primary_anchor }}"
+                                                                class="btn btn-outline-danger btn-sm"
+                                                                data-flow-jump="{{ (source_anchor if single_step_flow else sink_anchor) if finding.flow_steps else primary_anchor }}"
+                                                            >
+                                                                Sink
+                                                            </a>
+                                                        {% endif %}
+                                                        {% if finding.flow_steps %}
+                                                            <a href="#{{ flow_anchor }}" class="btn btn-outline-dark btn-sm" data-flow-jump="{{ flow_anchor }}">Flow Trace</a>
+                                                        {% endif %}
+                                                        <div class="ms-auto d-flex gap-2 flex-wrap">
+                                                            <span class="badge text-bg-{{ tool_badge(row.tool) }}">Detected by {{ tool_label(row.tool) }}</span>
+                                                            {% if row.tool_version %}
+                                                                <span class="badge text-bg-light border">v{{ row.tool_version }}</span>
+                                                            {% endif %}
+                                                            {% if row.variant %}
+                                                                <span class="badge text-bg-light border">{{ row.variant }}</span>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+
+                                                    {% if finding.cwe_ids or finding.owasp_tags %}
+                                                        <div class="d-flex gap-2 flex-wrap mb-3">
+                                                            {% for cwe in finding.cwe_ids %}
+                                                                <span class="badge text-bg-light border">{{ cwe }}</span>
+                                                            {% endfor %}
+                                                            {% for tag in finding.owasp_tags %}
+                                                                <span class="badge text-bg-light border">{{ tag }}</span>
                                                             {% endfor %}
                                                         </div>
-                                                    {% else %}
-                                                        <div class="feature-tile p-3 text-body-secondary">
-                                                            N/A. This tool output does not expose a source-to-sink flow trace for this finding.
-                                                        </div>
                                                     {% endif %}
+
+                                                    <div class="row g-3 mt-1">
+                                                        <div class="col-xl-4">
+                                                            <div class="small text-uppercase text-secondary mb-2">Observed Features</div>
+                                                            <div class="d-grid gap-2">
+                                                                {% for feature in finding.feature_rows %}
+                                                                    {% if feature.available and feature.key == "primary_location" %}
+                                                                        <a href="#{{ primary_anchor }}" class="feature-link" data-flow-jump="{{ primary_anchor }}">
+                                                                            <div class="feature-tile p-3">
+                                                                                <div class="small text-uppercase text-secondary">{{ feature.label }}</div>
+                                                                                <div class="fw-semibold">{{ feature.value }}</div>
+                                                                            </div>
+                                                                        </a>
+                                                                    {% elif feature.available and feature.key == "source_location" %}
+                                                                        <a href="#{{ source_anchor if finding.flow_steps else primary_anchor }}" class="feature-link" data-flow-jump="{{ source_anchor if finding.flow_steps else primary_anchor }}">
+                                                                            <div class="feature-tile p-3">
+                                                                                <div class="small text-uppercase text-secondary">{{ feature.label }}</div>
+                                                                                <div class="fw-semibold">{{ feature.value }}</div>
+                                                                            </div>
+                                                                        </a>
+                                                                    {% elif feature.available and feature.key == "sink_location" %}
+                                                                        <a href="#{{ (source_anchor if single_step_flow else sink_anchor) if finding.flow_steps else primary_anchor }}" class="feature-link" data-flow-jump="{{ (source_anchor if single_step_flow else sink_anchor) if finding.flow_steps else primary_anchor }}">
+                                                                            <div class="feature-tile p-3">
+                                                                                <div class="small text-uppercase text-secondary">{{ feature.label }}</div>
+                                                                                <div class="fw-semibold">{{ feature.value }}</div>
+                                                                            </div>
+                                                                        </a>
+                                                                    {% elif feature.available and feature.key == "flow_trace" %}
+                                                                        <a href="#{{ flow_anchor }}" class="feature-link" data-flow-jump="{{ flow_anchor }}">
+                                                                            <div class="feature-tile p-3">
+                                                                                <div class="small text-uppercase text-secondary">{{ feature.label }}</div>
+                                                                                <div class="fw-semibold">{{ feature.value }}</div>
+                                                                            </div>
+                                                                        </a>
+                                                                    {% else %}
+                                                                        <div class="feature-tile p-3">
+                                                                            <div class="small text-uppercase text-secondary">{{ feature.label }}</div>
+                                                                            <div class="fw-semibold{% if not feature.available %} text-body-secondary{% endif %}">
+                                                                                {{ feature.value }}
+                                                                            </div>
+                                                                        </div>
+                                                                    {% endif %}
+                                                                {% endfor %}
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="col-xl-8">
+                                                            <div class="small text-uppercase text-secondary mb-2">Primary Location</div>
+                                                            {% if finding.primary_location %}
+                                                                <div id="{{ primary_anchor }}" class="feature-tile p-3 mb-3">
+                                                                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                                                        <div class="fw-semibold">{{ finding.primary_location.display_label }}</div>
+                                                                        {% if finding.primary_location.has_snippet %}
+                                                                            <span class="badge text-bg-{{ finding.primary_location.language_badge }} snippet-language-badge">
+                                                                                {{ finding.primary_location.language_label }}
+                                                                            </span>
+                                                                        {% endif %}
+                                                                    </div>
+                                                                    {% if finding.primary_location.message %}
+                                                                        <div class="small text-body-secondary mt-2">{{ finding.primary_location.message }}</div>
+                                                                    {% endif %}
+                                                                    {% if finding.primary_location.has_snippet %}
+                                                                        <pre class="location-snippet mt-3"><code class="snippet-highlight">{{ finding.primary_location.snippet_html }}</code></pre>
+                                                                    {% endif %}
+                                                                </div>
+                                                            {% else %}
+                                                                <div class="feature-tile p-3 mb-3 text-body-secondary">N/A</div>
+                                                            {% endif %}
+
+                                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                                                <div class="small text-uppercase text-secondary">Flow Trace</div>
+                                                                {% if finding.flow_steps %}
+                                                                    <div class="small text-body-secondary">Scroll inside this panel to inspect long traces.</div>
+                                                                {% endif %}
+                                                            </div>
+                                                            {% if finding.flow_steps %}
+                                                                <div id="{{ flow_anchor }}" class="flow-trace-scroll" data-flow-scroll tabindex="0">
+                                                                    <div class="d-grid gap-2">
+                                                                        {% for step in finding.flow_steps %}
+                                                                            {% set step_anchor = finding_base_id ~ "-step-" ~ loop.index %}
+                                                                            {% if loop.first %}
+                                                                                {% set step_anchor = source_anchor %}
+                                                                            {% elif loop.last %}
+                                                                                {% set step_anchor = sink_anchor %}
+                                                                            {% endif %}
+                                                                            <div id="{{ step_anchor }}" class="flow-step p-3" data-flow-step>
+                                                                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                                                                    <div>
+                                                                                        <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+                                                                                            {% if step.role == "source" %}
+                                                                                                <span class="badge text-bg-success">Source</span>
+                                                                                            {% elif step.role == "sink" %}
+                                                                                                <span class="badge text-bg-danger">Sink</span>
+                                                                                            {% else %}
+                                                                                                <span class="badge text-bg-secondary">Step {{ loop.index }}</span>
+                                                                                            {% endif %}
+                                                                                            <span class="fw-semibold">{{ step.display_label }}</span>
+                                                                                        </div>
+                                                                                        {% if step.message %}
+                                                                                            <div class="small text-body-secondary">{{ step.message }}</div>
+                                                                                        {% endif %}
+                                                                                    </div>
+                                                                                    <div class="small text-body-secondary text-end">
+                                                                                        {% if step.importance %}
+                                                                                            <div>{{ step.importance }}</div>
+                                                                                        {% endif %}
+                                                                                        {% if step.execution_order is not none %}
+                                                                                            <div>order {{ step.execution_order }}</div>
+                                                                                        {% endif %}
+                                                                                    </div>
+                                                                                </div>
+                                                                                {% if step.has_snippet %}
+                                                                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3 mb-2">
+                                                                                        <span class="badge text-bg-{{ step.language_badge }} snippet-language-badge">{{ step.language_label }}</span>
+                                                                                        {% if step.line_label %}
+                                                                                            <span class="small text-body-secondary">{{ step.line_label }}</span>
+                                                                                        {% endif %}
+                                                                                    </div>
+                                                                                    <pre class="location-snippet"><code class="snippet-highlight">{{ step.snippet_html }}</code></pre>
+                                                                                {% endif %}
+                                                                            </div>
+                                                                        {% endfor %}
+                                                                    </div>
+                                                                </div>
+                                                            {% else %}
+                                                                <div class="feature-tile p-3 text-body-secondary">
+                                                                    N/A. This tool output does not expose a source-to-sink flow trace for this finding.
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -408,4 +582,40 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.querySelectorAll('[data-flow-jump]').forEach((trigger) => {
+        trigger.addEventListener('click', (event) => {
+            const targetId = trigger.getAttribute('data-flow-jump');
+            if (!targetId) {
+                return;
+            }
+
+            const target = document.getElementById(targetId);
+            if (!target) {
+                return;
+            }
+
+            event.preventDefault();
+
+            const flowScrollContainer = target.closest('[data-flow-scroll]');
+            if (flowScrollContainer) {
+                const offsetTop = target.offsetTop - flowScrollContainer.offsetTop - 8;
+                flowScrollContainer.scrollTo({
+                    top: Math.max(0, offsetTop),
+                    behavior: 'smooth',
+                });
+                flowScrollContainer.classList.add('is-focused');
+                window.setTimeout(() => flowScrollContainer.classList.remove('is-focused'), 1600);
+            } else {
+                target.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }
+
+            target.classList.add('is-focused');
+            window.setTimeout(() => target.classList.remove('is-focused'), 1600);
+        });
+    });
+</script>
 {% endblock %}

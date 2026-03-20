@@ -17,6 +17,7 @@ from flask import (
 )
 
 from .auth import csrf_protect, login_required
+from .services.collector_metadata import collector_scope_label, collector_scope_sort_key
 from .services.makefile import (
     discover_make_targets,
     group_targets,
@@ -179,6 +180,14 @@ def _advanced_sections(targets: list) -> list[tuple[str, list]]:
     return sections
 
 
+def _advanced_scope_filters(targets: list) -> list[dict[str, str]]:
+    scopes = sorted(
+        {target.collector_scope for target in targets if target.collector_scope},
+        key=collector_scope_sort_key,
+    )
+    return [{"value": scope, "label": collector_scope_label(scope)} for scope in scopes]
+
+
 @bp.route("/")
 @login_required
 def dashboard():
@@ -192,6 +201,7 @@ def dashboard():
         preparation_targets=_preparation_targets(targets),
         quick_actions=_quick_actions(targets),
         advanced_sections=_advanced_sections(targets),
+        advanced_scope_filters=_advanced_scope_filters(targets),
         workflow_items=_workflow_items(targets),
         jobs=jobs,
         job_summary=summary,
@@ -254,6 +264,7 @@ def insights_metrics():
             "project": request.args.get("project", ""),
             "metric": request.args.get("metric", ""),
             "tool": request.args.get("tool", ""),
+            "collector_scope": request.args.get("collector_scope", ""),
             "component_type": request.args.get("component_type", ""),
             "run_id": request.args.get("run_id", ""),
             "status": request.args.get("status", ""),

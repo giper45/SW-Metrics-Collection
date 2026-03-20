@@ -5,6 +5,12 @@ import os
 from pathlib import Path
 import re
 
+from .collector_metadata import (
+    collector_scope_badge,
+    collector_scope_description,
+    collector_scope_label,
+    extract_collector_scope_from_text,
+)
 from .jobs import OperationJob, run_streaming_command
 
 
@@ -65,6 +71,7 @@ DISPLAY_NAME_OVERRIDES = {
     "collect-vulnerability-all": "Vulnerability Suite",
     "collect-vulnerability-codeql-java": "CodeQL",
     "collect-vulnerability-dependency-check": "Dependency-Check",
+    "collect-vulnerability-psalm-php": "Psalm",
     "collect-vulnerability-pmd-security": "PMD",
     "collect-vulnerability-spotbugs-findsecbugs": "SpotBugs + FindSecBugs",
     "compute-structure-inventory": "Structure Inventory",
@@ -102,6 +109,7 @@ TOKEN_LABELS = {
     "mi": "MI",
     "osv": "OSV",
     "pmd": "PMD",
+    "psalm": "Psalm",
     "sarif": "SARIF",
     "scc": "SCC",
     "semgrep": "Semgrep",
@@ -116,6 +124,7 @@ class MakeTarget:
     category: str
     dependencies: tuple[str, ...]
     description: str | None = None
+    collector_scope: str | None = None
 
     @property
     def display_name(self) -> str:
@@ -129,6 +138,28 @@ class MakeTarget:
         if len(text) <= 100:
             return text
         return text[:97].rstrip() + "..."
+
+    @property
+    def has_collector_scope(self) -> bool:
+        return bool(self.collector_scope)
+
+    @property
+    def collector_scope_label(self) -> str:
+        if not self.collector_scope:
+            return ""
+        return collector_scope_label(self.collector_scope)
+
+    @property
+    def collector_scope_badge(self) -> str:
+        if not self.collector_scope:
+            return "secondary"
+        return collector_scope_badge(self.collector_scope)
+
+    @property
+    def collector_scope_description(self) -> str:
+        if not self.collector_scope:
+            return ""
+        return collector_scope_description(self.collector_scope)
 
 
 def discover_make_targets(makefile_path: Path) -> list[MakeTarget]:
@@ -152,6 +183,7 @@ def discover_make_targets(makefile_path: Path) -> list[MakeTarget]:
             item for item in match.group(2).strip().split() if item and not item.startswith("#")
         )
         description = _extract_recipe_description(lines, index + 1)
+        collector_scope = _extract_recipe_collector_scope(lines, index + 1)
 
         for target_name in raw_targets:
             if not _is_public_target(target_name) or target_name in seen:
@@ -163,6 +195,7 @@ def discover_make_targets(makefile_path: Path) -> list[MakeTarget]:
                     category=categorize_target(target_name),
                     dependencies=dependencies,
                     description=description,
+                    collector_scope=collector_scope,
                 )
             )
 
@@ -282,6 +315,19 @@ def _extract_recipe_description(lines: list[str], start_index: int) -> str | Non
 
     unique_comments = list(dict.fromkeys(comments))
     return " ".join(unique_comments)
+
+
+def _extract_recipe_collector_scope(lines: list[str], start_index: int) -> str | None:
+    for raw_line in lines[start_index:]:
+        if raw_line.startswith((" ", "\t")):
+            scope = extract_collector_scope_from_text(raw_line)
+            if scope:
+                return scope
+            continue
+        if not raw_line.strip():
+            continue
+        break
+    return None
 
 
 def _recipe_comment_text(raw_line: str) -> str | None:

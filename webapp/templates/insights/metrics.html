@@ -24,7 +24,7 @@
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
     <div>
         <h1 class="h2 mb-2">Software Metrics</h1>
-        <p class="text-body-secondary mb-0">Inspect collected measurements across runs, tools, components, and normalized sources.</p>
+        <p class="text-body-secondary mb-0">Inspect collected measurements across runs, collector scopes, tools, components, and normalized sources.</p>
     </div>
     <a href="{{ url_for('main.insights_overview') }}" class="btn btn-outline-secondary">Back to Insights</a>
 </div>
@@ -70,6 +70,15 @@
                             <option value="">All tools</option>
                             {% for tool in view_data.options.tools %}
                                 <option value="{{ tool }}"{% if view_data.filters.tool == tool %} selected{% endif %}>{{ tool_label(tool) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="collector_scope">Collector scope</label>
+                        <select class="form-select" id="collector_scope" name="collector_scope">
+                            <option value="">All scopes</option>
+                            {% for scope in view_data.options.collector_scopes %}
+                                <option value="{{ scope.key }}"{% if view_data.filters.collector_scope == scope.key %} selected{% endif %}>{{ scope.label }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -162,6 +171,35 @@
             </div>
         {% endif %}
 
+        {% if view_data.summary.scope_breakdown %}
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
+                        <span class="fw-semibold">Collector scopes in view</span>
+                        {% for scope in view_data.summary.scope_breakdown %}
+                            <span class="badge text-bg-{{ scope.badge }}">{{ scope.label }} · {{ format_number(scope.rows) }} rows</span>
+                        {% endfor %}
+                    </div>
+                    <div class="row g-3">
+                        {% for scope in view_data.summary.scope_breakdown %}
+                            <div class="col-md-6 col-xxl-3">
+                                <div class="border rounded-4 p-3 h-100">
+                                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                        <span class="badge text-bg-{{ scope.badge }}">{{ scope.label }}</span>
+                                        <span class="small text-body-secondary">{{ format_number(scope.rows) }} rows</span>
+                                    </div>
+                                    <div class="small text-body-secondary mb-2">{{ scope.description }}</div>
+                                    <div class="small text-body-secondary">
+                                        {{ format_number(scope.metrics) }} metrics · {{ format_number(scope.tools) }} tools
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
         {% if view_data.groups %}
             <div class="row g-3 mb-4">
                 {% for group in view_data.groups %}
@@ -170,8 +208,12 @@
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
                                     <div>
-                                        <span class="badge text-bg-{{ metric_badge(group.metric) }} mb-2">{{ group.metric }}</span>
+                                        <div class="d-flex flex-wrap gap-2 mb-2">
+                                            <span class="badge text-bg-{{ metric_badge(group.metric) }}">{{ group.metric }}</span>
+                                            <span class="badge text-bg-{{ group.collector_scope_badge }}">{{ group.collector_scope_label }}</span>
+                                        </div>
                                         <h2 class="h5 mb-1">{{ group.measure }}</h2>
+                                        <div class="small text-body-secondary">{{ group.collector_scope_description }}</div>
                                     </div>
                                     <div class="text-end small text-body-secondary">
                                         {{ format_number(group.rows) }} rows
@@ -232,11 +274,11 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Project</th>
-                                <th>Measure</th>
-                                <th>Value</th>
-                                <th>Tool</th>
-                                <th>Component</th>
-                                <th>Timestamp</th>
+                                    <th>Measure</th>
+                                    <th>Value</th>
+                                    <th>Tool</th>
+                                    <th>Component</th>
+                                    <th>Timestamp</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -255,6 +297,7 @@
                                     <td>
                                         <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
                                             <span class="badge text-bg-{{ tool_badge(row.tool) }}">{{ tool_label(row.tool) }}</span>
+                                            <span class="badge text-bg-{{ row._collector_scope_badge }}">{{ row._collector_scope_label }}</span>
                                             {% if row.tool_version %}
                                                 <span class="badge text-bg-light border">v{{ row.tool_version }}</span>
                                             {% endif %}
@@ -283,7 +326,7 @@
             <div class="card shadow-sm">
                 <div class="card-body p-5 text-center">
                     <h2 class="h4">No software metrics match the current filters.</h2>
-                    <p class="text-body-secondary mb-0">Try another source or run a collection target from the Run page.</p>
+                    <p class="text-body-secondary mb-0">Try another collector scope or source, or run a collection target from the Run page.</p>
                 </div>
             </div>
         {% endif %}

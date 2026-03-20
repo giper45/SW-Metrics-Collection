@@ -215,9 +215,100 @@ def test_results_service_enriches_vulnerability_flows_and_source_snippets(tmp_pa
     assert finding["observed_features"]["flow_path"] is True
     assert finding["source_location"]["path"] == "src/main/java/com/example/Controller.java"
     assert finding["sink_location"]["path"] == "src/main/java/com/example/View.java"
+    assert finding["primary_location"]["language_label"] == "Java"
+    assert finding["flow_steps"][0]["language_label"] == "Java"
     assert "request.getParameter" in finding["flow_steps"][0]["snippet"]
     assert "response.getWriter().write(name);" in finding["flow_steps"][1]["snippet"]
+    assert "color:" in str(finding["flow_steps"][0]["snippet_html"])
     assert finding["feature_rows"][3]["value"] == "2 steps"
+
+
+def test_results_service_auto_source_prefers_matching_raw_vulnerability_rows(tmp_path):
+    results_dir = tmp_path / "results"
+    normalized_dir = tmp_path / "results_normalized"
+    results_dir.mkdir()
+    normalized_dir.mkdir()
+    raw_dir = results_dir / "vulnerabilities" / "jsonl"
+    normalized_vuln_dir = normalized_dir / "vulnerabilities" / "jsonl"
+    raw_dir.mkdir(parents=True)
+    normalized_vuln_dir.mkdir(parents=True)
+
+    (raw_dir / "mutillidae.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "run_id": "run-raw",
+                "project": "mutillidae",
+                "metric": "vulnerability-findings",
+                "variant": "psalm-php-taint-analysis",
+                "component_type": "module",
+                "component": "src",
+                "submetric": "vulnerability_total",
+                "status": "ok",
+                "value": 2,
+                "tool": "psalm",
+                "tool_version": "6.16.1",
+                "parameters": {
+                    "summary": {
+                        "total": 2,
+                        "severity_critical": 0,
+                        "severity_high": 2,
+                        "severity_medium": 0,
+                        "severity_low": 0,
+                        "severity_info": 0,
+                        "severity_unknown": 0,
+                    },
+                    "findings": [],
+                },
+                "timestamp_utc": "2026-03-20T12:00:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (normalized_vuln_dir / "repo-sec.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "run_id": "run-normalized",
+                "project": "repo-sec",
+                "metric": "vulnerability-findings",
+                "variant": "codeql-java-security-extended",
+                "component_type": "module",
+                "component": "service",
+                "submetric": "vulnerability_total",
+                "status": "ok",
+                "value": 1,
+                "tool": "codeql",
+                "tool_version": "2.23.1",
+                "parameters": {
+                    "summary": {
+                        "total": 1,
+                        "severity_critical": 0,
+                        "severity_high": 1,
+                        "severity_medium": 0,
+                        "severity_low": 0,
+                        "severity_info": 0,
+                        "severity_unknown": 0,
+                    },
+                    "findings": [],
+                },
+                "timestamp_utc": "2026-03-20T12:05:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = load_result_rows(results_dir, normalized_dir)
+    view_data = build_vulnerability_view(
+        rows,
+        {"project": "mutillidae", "tool": "psalm", "source": "", "search": "", "severity": ""},
+    )
+
+    assert view_data["filters"]["source"] == "raw"
+    assert view_data["summary"]["findings"] == 2
+    assert view_data["entries"][0]["row"]["project"] == "mutillidae"
 
 
 def test_results_service_builds_metric_view(tmp_path):
@@ -266,6 +357,23 @@ def test_results_service_builds_metric_view(tmp_path):
                         "timestamp_utc": "2026-03-20T10:00:01Z",
                     }
                 ),
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "run_id": "run-2",
+                        "project": "repo-alpha",
+                        "metric": "class-count",
+                        "variant": "javaparser-default",
+                        "component_type": "module",
+                        "component": "core",
+                        "status": "ok",
+                        "value": 12.0,
+                        "tool": "javaparser",
+                        "tool_version": "1.0",
+                        "parameters": {},
+                        "timestamp_utc": "2026-03-20T10:00:02Z",
+                    }
+                ),
             ]
         )
         + "\n",
@@ -275,11 +383,139 @@ def test_results_service_builds_metric_view(tmp_path):
     rows = load_result_rows(results_dir, normalized_dir)
     view_data = build_metrics_view(rows, {"source": "raw", "metric": "", "search": ""})
 
-    assert view_data["summary"]["rows"] == 2
-    assert view_data["summary"]["tool_names"] == ["cloc", "lizard"]
-    assert {group["measure"] for group in view_data["groups"]} == {"loc", "cc_proxy_mean"}
+    assert view_data["summary"]["rows"] == 3
+    assert view_data["summary"]["tool_names"] == ["cloc", "javaparser", "lizard"]
+    assert view_data["summary"]["collector_scopes"] == 2
+    assert view_data["summary"]["scope_names"] == ["generic", "java"]
+    assert {group["measure"] for group in view_data["groups"]} == {"loc", "cc_proxy_mean", "class-count"}
+    assert {group["collector_scope"] for group in view_data["groups"]} == {"generic", "java"}
     assert any(group["tool_names"] == ["cloc"] for group in view_data["groups"])
+    assert any(scope["key"] == "java" for scope in view_data["summary"]["scope_breakdown"])
     assert view_data["rows"][0]["component"] in {"src/Main.java", "core"}
+
+
+def test_results_service_auto_source_prefers_matching_raw_metric_rows(tmp_path):
+    results_dir = tmp_path / "results"
+    normalized_dir = tmp_path / "results_normalized"
+    results_dir.mkdir()
+    normalized_dir.mkdir()
+    raw_dir = results_dir / "software-metrics" / "jsonl"
+    normalized_metrics_dir = normalized_dir / "software-metrics" / "jsonl"
+    raw_dir.mkdir(parents=True)
+    normalized_metrics_dir.mkdir(parents=True)
+
+    (raw_dir / "mutillidae.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "run_id": "run-raw",
+                "project": "mutillidae",
+                "metric": "loc",
+                "variant": "cloc-default",
+                "component_type": "file",
+                "component": "src/index.php",
+                "status": "ok",
+                "value": 12,
+                "tool": "cloc",
+                "tool_version": "1.0",
+                "parameters": {},
+                "timestamp_utc": "2026-03-20T12:00:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (normalized_metrics_dir / "repo-sec.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "run_id": "run-normalized",
+                "project": "repo-sec",
+                "metric": "class-count",
+                "variant": "javaparser-default",
+                "component_type": "module",
+                "component": "service",
+                "status": "ok",
+                "value": 8,
+                "tool": "javaparser",
+                "tool_version": "1.0",
+                "parameters": {},
+                "timestamp_utc": "2026-03-20T12:05:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = load_result_rows(results_dir, normalized_dir)
+    view_data = build_metrics_view(rows, {"project": "mutillidae", "source": "", "search": ""})
+
+    assert view_data["filters"]["source"] == "raw"
+    assert view_data["summary"]["rows"] == 1
+    assert view_data["rows"][0]["project"] == "mutillidae"
+
+
+def test_results_service_filters_metrics_by_collector_scope(tmp_path):
+    results_dir = tmp_path / "results"
+    normalized_dir = tmp_path / "results_normalized"
+    results_dir.mkdir()
+    normalized_dir.mkdir()
+    metrics_dir = results_dir / "software-metrics" / "jsonl"
+    metrics_dir.mkdir(parents=True)
+
+    (metrics_dir / "repo-metrics.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "run_id": "run-2",
+                        "project": "repo-alpha",
+                        "metric": "loc",
+                        "variant": "cloc-default",
+                        "component_type": "file",
+                        "component": "src/Main.java",
+                        "status": "ok",
+                        "value": 120.0,
+                        "tool": "cloc",
+                        "tool_version": "1.0",
+                        "parameters": {},
+                        "timestamp_utc": "2026-03-20T10:00:00Z",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "run_id": "run-2",
+                        "project": "repo-alpha",
+                        "metric": "class-count",
+                        "variant": "javaparser-default",
+                        "component_type": "module",
+                        "component": "core",
+                        "status": "ok",
+                        "value": 12.0,
+                        "tool": "javaparser",
+                        "tool_version": "1.0",
+                        "parameters": {},
+                        "timestamp_utc": "2026-03-20T10:00:02Z",
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = load_result_rows(results_dir, normalized_dir)
+    view_data = build_metrics_view(rows, {"source": "raw", "collector_scope": "java", "search": ""})
+
+    assert view_data["summary"]["rows"] == 1
+    assert view_data["rows"][0]["tool"] == "javaparser"
+    assert view_data["rows"][0]["_collector_scope"] == "java"
+    assert view_data["options"]["collector_scopes"] == [
+        {"key": "generic", "label": "Generic", "badge": "secondary"},
+        {"key": "java", "label": "Java", "badge": "warning"},
+    ]
 
 
 def test_results_service_reads_nested_result_directories(tmp_path):
@@ -345,8 +581,36 @@ def test_results_routes_render_after_login(tmp_path):
     makefile_path.write_text("clean:\n\t@echo clean\n", encoding="utf-8")
     results_dir = tmp_path / "results"
     normalized_dir = tmp_path / "results_normalized"
+    src_dir = tmp_path / "src"
     results_dir.mkdir()
     normalized_dir.mkdir()
+    (src_dir / "repo-sec" / "src").mkdir(parents=True, exist_ok=True)
+    (src_dir / "repo-sec" / "src" / "A.java").write_text(
+        "\n".join(
+            [
+                "class A {",
+                "  String read(String user) {",
+                "    return user;",
+                "  }",
+                "}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (src_dir / "repo-sec" / "src" / "B.java").write_text(
+        "\n".join(
+            [
+                "class B {",
+                "  void query(String sql) {",
+                "    System.out.println(sql);",
+                "  }",
+                "}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     (results_dir / "vulnerabilities" / "jsonl" / "repo.jsonl").parent.mkdir(parents=True, exist_ok=True)
     (results_dir / "vulnerabilities" / "jsonl" / "repo.jsonl").write_text(
@@ -440,18 +704,62 @@ def test_results_routes_render_after_login(tmp_path):
                         "severity_info": 0,
                         "severity_unknown": 0,
                     },
-                    "findings": [
-                        {
-                            "rule_id": "SQL_INJECTION",
-                            "rule_name": "SQL injection",
-                            "message": "Unsanitized input reaches query",
-                            "severity": "medium",
-                            "source_path": "src/B.java",
-                            "start_line": 20,
-                            "cwe_ids": ["CWE-89"],
-                            "owasp_tags": ["OWASP-A03"],
-                        }
-                    ],
+                            "findings": [
+                                {
+                                    "rule_id": "SQL_INJECTION",
+                                    "rule_name": "SQL injection",
+                                    "message": "Unsanitized input reaches query",
+                                    "severity": "medium",
+                                    "source_path": "src/B.java",
+                                    "start_line": 20,
+                                    "primary_location": {
+                                        "path": "src/B.java",
+                                        "start_line": 3,
+                                        "end_line": 3,
+                                        "message": "Sink location",
+                                    },
+                                    "source_location": {
+                                        "path": "src/A.java",
+                                        "start_line": 2,
+                                        "end_line": 2,
+                                        "message": "Source location",
+                                    },
+                                    "sink_location": {
+                                        "path": "src/B.java",
+                                        "start_line": 3,
+                                        "end_line": 3,
+                                        "message": "Sink location",
+                                    },
+                                    "flow_steps": [
+                                        {
+                                            "path": "src/A.java",
+                                            "start_line": 2,
+                                            "end_line": 2,
+                                            "message": "User input enters the method",
+                                            "role": "source",
+                                            "execution_order": 1,
+                                        },
+                                        {
+                                            "path": "src/B.java",
+                                            "start_line": 3,
+                                            "end_line": 3,
+                                            "message": "User input reaches the sink",
+                                            "role": "sink",
+                                            "execution_order": 2,
+                                        },
+                                    ],
+                                    "flow_path_count": 1,
+                                    "observed_features": {
+                                        "primary_location": True,
+                                        "source_location": True,
+                                        "sink_location": True,
+                                        "flow_path": True,
+                                        "code_snippets": True,
+                                    },
+                                    "cwe_ids": ["CWE-89"],
+                                    "owasp_tags": ["OWASP-A03"],
+                                }
+                            ],
                 },
                 "timestamp_utc": "2026-03-20T09:05:00Z",
             }
@@ -467,7 +775,7 @@ def test_results_routes_render_after_login(tmp_path):
             "SECRET_KEY": "test-secret",
             "PROJECT_ROOT": tmp_path,
             "MAKEFILE_PATH": makefile_path,
-            "SRC_DIR": tmp_path / "src",
+            "SRC_DIR": src_dir,
             "RESULTS_DIR": results_dir,
             "RESULTS_NORMALIZED_DIR": normalized_dir,
             "ANALYSIS_OUT_DIR": tmp_path / "analysis_out",
@@ -488,6 +796,7 @@ def test_results_routes_render_after_login(tmp_path):
 
     overview = client.get("/insights")
     vulnerabilities = client.get("/insights/vulnerabilities")
+    vulnerabilities_raw = client.get("/insights/vulnerabilities?source=raw")
     metrics = client.get("/insights/metrics")
 
     assert overview.status_code == 200
@@ -502,11 +811,18 @@ def test_results_routes_render_after_login(tmp_path):
     assert "CodeQL" in vulnerabilities_html
     assert "Observed Features" in vulnerabilities_html
     assert "Flow Trace" in vulnerabilities_html
-    assert "N/A. This tool output does not expose a source-to-sink flow trace for this finding." in vulnerabilities_html
+    assert 'data-flow-jump="' in vulnerabilities_html
+    assert "Scroll inside this panel to inspect long traces." in vulnerabilities_html
+    assert "Source" in vulnerabilities_html
+    assert "Sink" in vulnerabilities_html
+    assert vulnerabilities_raw.status_code == 200
+    assert "N/A. This tool output does not expose a source-to-sink flow trace for this finding." in vulnerabilities_raw.get_data(as_text=True)
     assert metrics.status_code == 200
     metrics_html = metrics.get_data(as_text=True)
     assert "src/A.java" in metrics_html
     assert "CLOC" in metrics_html
+    assert "Collector scope" in metrics_html
+    assert "Generic" in metrics_html
 
 
 def test_ajax_queue_selected_targets_returns_json(tmp_path):

@@ -1,11 +1,48 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import html
 import json
 from pathlib import Path
+import re
 from statistics import mean
 from typing import Any
 
+from markupsafe import Markup
+
+from .collector_metadata import (
+    collector_scope_badge,
+    collector_scope_description,
+    collector_scope_label,
+    collector_scope_sort_key,
+    infer_metric_row_scope,
+)
+
+try:
+    from pygments import highlight
+    from pygments.formatters import HtmlFormatter
+    from pygments.lexers import (
+        CssLexer,
+        HtmlLexer,
+        JavaLexer,
+        JavascriptLexer,
+        JsonLexer,
+        PhpLexer,
+        PythonLexer,
+        TextLexer,
+        TypeScriptLexer as TypescriptLexer,
+        XmlLexer,
+        YamlLexer,
+        get_lexer_for_filename,
+    )
+    from pygments.util import ClassNotFound
+except ImportError:  # pragma: no cover - fallback for minimal installs
+    highlight = None
+    HtmlFormatter = None
+    CssLexer = HtmlLexer = JavaLexer = JavascriptLexer = JsonLexer = None
+    PhpLexer = PythonLexer = TextLexer = TypescriptLexer = XmlLexer = YamlLexer = None
+    get_lexer_for_filename = None
+    ClassNotFound = Exception
 
 SEVERITY_ORDER = ("critical", "high", "medium", "low", "info", "unknown")
 SOURCE_LABELS = {
@@ -14,32 +51,50 @@ SOURCE_LABELS = {
 }
 TOOL_LABELS = {
     "cloc": "CLOC",
+    "ck": "CK",
     "codeql": "CodeQL",
     "ckjm": "CKJM",
     "ckjm-ext": "CKJM Extended",
     "dependency-check": "Dependency-Check",
     "findsecbugs": "FindSecBugs",
+    "git": "Git",
     "grype": "Grype",
+    "jacoco": "JaCoCo",
+    "java-halstead-analyzer": "Java Halstead Analyzer",
+    "javaparser": "JavaParser",
+    "jdepend": "JDepend",
     "lizard": "Lizard",
     "osv-scanner": "OSV-Scanner",
     "pmd": "PMD",
+    "psalm": "Psalm",
+    "radon": "Radon",
     "semgrep": "Semgrep",
+    "scc": "SCC",
     "spotbugs": "SpotBugs",
     "syft": "Syft",
     "tokei": "Tokei",
 }
 TOOL_BADGES = {
     "cloc": "primary",
+    "ck": "warning",
     "codeql": "dark",
     "ckjm": "secondary",
     "ckjm-ext": "secondary",
     "dependency-check": "warning",
     "findsecbugs": "warning",
+    "git": "dark",
     "grype": "danger",
+    "jacoco": "success",
+    "java-halstead-analyzer": "success",
+    "javaparser": "primary",
+    "jdepend": "secondary",
     "lizard": "warning",
     "osv-scanner": "dark",
     "pmd": "danger",
+    "psalm": "primary",
+    "radon": "success",
     "semgrep": "success",
+    "scc": "info",
     "spotbugs": "warning",
     "syft": "secondary",
     "tokei": "info",
@@ -47,6 +102,34 @@ TOOL_BADGES = {
 VULNERABILITY_METRIC = "vulnerability-findings"
 MAX_METRIC_ROWS = 250
 MAX_VULNERABILITY_CARDS = 60
+SNIPPET_LANGUAGE_LABELS = {
+    "java": "Java",
+    "php": "PHP",
+    "python": "Python",
+    "javascript": "JavaScript",
+    "typescript": "TypeScript",
+    "html": "HTML",
+    "xml": "XML",
+    "json": "JSON",
+    "yaml": "YAML",
+    "css": "CSS",
+    "text": "Text",
+}
+SNIPPET_LANGUAGE_BADGES = {
+    "java": "warning",
+    "php": "primary",
+    "python": "success",
+    "javascript": "info",
+    "typescript": "info",
+    "html": "secondary",
+    "xml": "secondary",
+    "json": "dark",
+    "yaml": "dark",
+    "css": "info",
+    "text": "secondary",
+}
+SNIPPET_FORMATTER = HtmlFormatter(nowrap=True, noclasses=True) if HtmlFormatter else None
+SNIPPET_LINE_RE = re.compile(r"^\s*(\d+)\s+\|\s?(.*)$")
 
 
 def load_result_rows(results_dir: Path, normalized_dir: Path) -> list[dict[str, Any]]:
@@ -124,7 +207,15 @@ def build_vulnerability_view(
         "components": _option_values(vulnerability_rows, "component"),
     }
 
-    selected_source = filters.get("source") or preferred_source(vulnerability_rows)
+    source_candidates = [
+        row
+        for row in vulnerability_rows
+        if _match_filter(row.get("project"), filters.get("project"))
+        and _match_filter(row.get("tool"), filters.get("tool"))
+        and _match_filter(row.get("run_id"), filters.get("run_id"))
+        and _match_filter(row.get("component"), filters.get("component"))
+    ]
+    selected_source = filters.get("source") or preferred_source(source_candidates) or preferred_source(vulnerability_rows)
     severity_filter = (filters.get("severity") or "").strip().lower()
     search = (filters.get("search") or "").strip().lower()
 
@@ -253,19 +344,37 @@ def build_metrics_view(
     rows: list[dict[str, Any]],
     filters: dict[str, str],
 ) -> dict[str, Any]:
-    metric_rows = [row for row in rows if row.get("metric") != VULNERABILITY_METRIC]
+    metric_rows = [_decorate_metric_row(row) for row in rows if row.get("metric") != VULNERABILITY_METRIC]
 
     options = {
         "sources": _option_values(metric_rows, "_source"),
         "projects": _option_values(metric_rows, "project"),
         "metrics": _option_values(metric_rows, "metric"),
         "tools": _option_values(metric_rows, "tool"),
+        "collector_scopes": _collector_scope_options(metric_rows),
         "component_types": _option_values(metric_rows, "component_type"),
         "runs": _option_values(metric_rows, "run_id"),
         "statuses": _option_values(metric_rows, "status"),
     }
 
-    selected_source = filters.get("source") or preferred_source(metric_rows)
+    source_candidates = []
+    for row in metric_rows:
+        if not _match_filter(row.get("project"), filters.get("project")):
+            continue
+        if not _match_filter(row.get("metric"), filters.get("metric")):
+            continue
+        if not _match_filter(row.get("tool"), filters.get("tool")):
+            continue
+        if not _match_filter(row.get("_collector_scope"), filters.get("collector_scope")):
+            continue
+        if not _match_filter(row.get("component_type"), filters.get("component_type")):
+            continue
+        if not _match_filter(row.get("run_id"), filters.get("run_id")):
+            continue
+        if not _match_filter(row.get("status"), filters.get("status")):
+            continue
+        source_candidates.append(row)
+    selected_source = filters.get("source") or preferred_source(source_candidates) or preferred_source(metric_rows)
     search = (filters.get("search") or "").strip().lower()
 
     filtered_rows = []
@@ -278,6 +387,8 @@ def build_metrics_view(
             continue
         if not _match_filter(row.get("tool"), filters.get("tool")):
             continue
+        if not _match_filter(row.get("_collector_scope"), filters.get("collector_scope")):
+            continue
         if not _match_filter(row.get("component_type"), filters.get("component_type")):
             continue
         if not _match_filter(row.get("run_id"), filters.get("run_id")):
@@ -289,17 +400,21 @@ def build_metrics_view(
         filtered_rows.append(row)
 
     metric_groups: list[dict[str, Any]] = []
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in filtered_rows:
-        grouped[_measure_label(row)].append(row)
+        grouped[(str(row.get("_collector_scope", "")).strip(), _measure_label(row))].append(row)
 
-    for measure_name, measure_rows in grouped.items():
+    for (scope_key, measure_name), measure_rows in grouped.items():
         numeric_values = [float(row["value"]) for row in measure_rows if _numeric_value(row)]
         metric_groups.append(
             {
                 "measure": measure_name,
                 "metric": str(measure_rows[0].get("metric", "")).strip(),
                 "submetric": str(measure_rows[0].get("submetric", "")).strip(),
+                "collector_scope": scope_key,
+                "collector_scope_label": collector_scope_label(scope_key),
+                "collector_scope_badge": collector_scope_badge(scope_key),
+                "collector_scope_description": collector_scope_description(scope_key),
                 "rows": len(measure_rows),
                 "tools": len({str(row.get("tool", "")).strip() for row in measure_rows if row.get("tool")}),
                 "tool_names": _option_values(measure_rows, "tool"),
@@ -311,7 +426,13 @@ def build_metrics_view(
             }
         )
 
-    metric_groups.sort(key=lambda item: (-item["rows"], item["measure"]))
+    metric_groups.sort(
+        key=lambda item: (
+            collector_scope_sort_key(item["collector_scope"]),
+            item["measure"],
+            -item["rows"],
+        )
+    )
     visible_rows = sorted(
         filtered_rows,
         key=lambda row: (
@@ -329,6 +450,7 @@ def build_metrics_view(
             "project": filters.get("project", ""),
             "metric": filters.get("metric", ""),
             "tool": filters.get("tool", ""),
+            "collector_scope": filters.get("collector_scope", ""),
             "component_type": filters.get("component_type", ""),
             "run_id": filters.get("run_id", ""),
             "status": filters.get("status", ""),
@@ -346,6 +468,14 @@ def build_metrics_view(
             "components": len({str(row.get("component", "")).strip() for row in filtered_rows if row.get("component")}),
             "tools": len({str(row.get("tool", "")).strip() for row in filtered_rows if row.get("tool")}),
             "tool_names": _option_values(filtered_rows, "tool"),
+            "collector_scopes": len(
+                {str(row.get("_collector_scope", "")).strip() for row in filtered_rows if row.get("_collector_scope")}
+            ),
+            "scope_names": [
+                item["key"]
+                for item in _collector_scope_breakdown(filtered_rows)
+            ],
+            "scope_breakdown": _collector_scope_breakdown(filtered_rows),
         },
     }
 
@@ -505,8 +635,51 @@ def _metric_search_blob(row: dict[str, Any]) -> str:
         row.get("component"),
         row.get("component_type"),
         row.get("run_id"),
+        row.get("_collector_scope"),
+        row.get("_collector_scope_label"),
     ]
     return " ".join(str(value or "") for value in values).lower()
+
+
+def _decorate_metric_row(row: dict[str, Any]) -> dict[str, Any]:
+    scope_key = infer_metric_row_scope(row)
+    enriched = dict(row)
+    enriched["_collector_scope"] = scope_key
+    enriched["_collector_scope_label"] = collector_scope_label(scope_key)
+    enriched["_collector_scope_badge"] = collector_scope_badge(scope_key)
+    enriched["_collector_scope_description"] = collector_scope_description(scope_key)
+    return enriched
+
+
+def _collector_scope_options(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    scopes = {str(row.get("_collector_scope", "")).strip() for row in rows if row.get("_collector_scope")}
+    return [
+        {
+            "key": scope,
+            "label": collector_scope_label(scope),
+            "badge": collector_scope_badge(scope),
+        }
+        for scope in sorted(scopes, key=collector_scope_sort_key)
+    ]
+
+
+def _collector_scope_breakdown(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    scopes = {str(row.get("_collector_scope", "")).strip() for row in rows if row.get("_collector_scope")}
+    breakdown: list[dict[str, Any]] = []
+    for scope in sorted(scopes, key=collector_scope_sort_key):
+        scope_rows = [row for row in rows if row.get("_collector_scope") == scope]
+        breakdown.append(
+            {
+                "key": scope,
+                "label": collector_scope_label(scope),
+                "badge": collector_scope_badge(scope),
+                "description": collector_scope_description(scope),
+                "rows": len(scope_rows),
+                "tools": len({str(row.get("tool", "")).strip() for row in scope_rows if row.get("tool")}),
+                "metrics": len({str(row.get("metric", "")).strip() for row in scope_rows if row.get("metric")}),
+            }
+        )
+    return breakdown
 
 
 def _severity_breakdown_from_row(row: dict[str, Any]) -> Counter:
@@ -649,21 +822,25 @@ def _normalize_finding(
         "observed_features": observed_features,
         "feature_rows": [
             {
+                "key": "primary_location",
                 "label": "Primary location",
                 "available": observed_features["primary_location"],
                 "value": primary_location.get("display_label", "N/A") if observed_features["primary_location"] else "N/A",
             },
             {
+                "key": "source_location",
                 "label": "Source",
                 "available": observed_features["source_location"],
                 "value": source_location.get("display_label", "N/A") if observed_features["source_location"] else "N/A",
             },
             {
+                "key": "sink_location",
                 "label": "Sink",
                 "available": observed_features["sink_location"],
                 "value": sink_location.get("display_label", "N/A") if observed_features["sink_location"] else "N/A",
             },
             {
+                "key": "flow_trace",
                 "label": "Flow trace",
                 "available": observed_features["flow_path"],
                 "value": (
@@ -674,6 +851,7 @@ def _normalize_finding(
                 else "N/A",
             },
             {
+                "key": "code_snippets",
                 "label": "Code snippets",
                 "available": observed_features["code_snippets"],
                 "value": f"{snippet_count} snippet(s) available" if observed_features["code_snippets"] else "N/A",
@@ -704,6 +882,89 @@ def _display_label(path: str, start_line: int | None, end_line: int | None) -> s
     if path and line_label:
         return f"{path} ({line_label})"
     return path or line_label or "N/A"
+
+
+def _snippet_language_from_path(path: str) -> str:
+    suffix = Path(str(path or "").strip()).suffix.lower()
+    mapping = {
+        ".java": "java",
+        ".php": "php",
+        ".py": "python",
+        ".js": "javascript",
+        ".jsx": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".html": "html",
+        ".htm": "html",
+        ".xml": "xml",
+        ".json": "json",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".css": "css",
+    }
+    return mapping.get(suffix, "text")
+
+
+def _snippet_lexer(path: str):
+    language = _snippet_language_from_path(path)
+    if PhpLexer and language == "php":
+        return PhpLexer(startinline=True)
+    if JavaLexer and language == "java":
+        return JavaLexer()
+    if PythonLexer and language == "python":
+        return PythonLexer()
+    if JavascriptLexer and language == "javascript":
+        return JavascriptLexer()
+    if TypescriptLexer and language == "typescript":
+        return TypescriptLexer()
+    if HtmlLexer and language == "html":
+        return HtmlLexer()
+    if XmlLexer and language == "xml":
+        return XmlLexer()
+    if JsonLexer and language == "json":
+        return JsonLexer()
+    if YamlLexer and language == "yaml":
+        return YamlLexer()
+    if CssLexer and language == "css":
+        return CssLexer()
+    if get_lexer_for_filename:
+        try:
+            return get_lexer_for_filename(path or "snippet.txt")
+        except ClassNotFound:
+            pass
+    return TextLexer() if TextLexer else None
+
+
+def _highlight_snippet_html(snippet: str, *, path: str) -> Markup:
+    text = str(snippet or "")
+    if not text:
+        return Markup("")
+
+    line_items = []
+    parsed_lines = []
+    for raw_line in text.splitlines():
+        match = SNIPPET_LINE_RE.match(raw_line)
+        if not match:
+            parsed_lines = []
+            break
+        parsed_lines.append((int(match.group(1)), match.group(2)))
+    if parsed_lines:
+        line_items = parsed_lines
+    else:
+        line_items = [(None, raw_line) for raw_line in text.splitlines()]
+
+    lexer = _snippet_lexer(path)
+    if highlight and lexer and SNIPPET_FORMATTER:
+        rendered_lines = []
+        for line_number, code_line in line_items:
+            highlighted = highlight(code_line, lexer, SNIPPET_FORMATTER).rstrip("\n")
+            if line_number is not None:
+                prefix = f'<span style="color: #6c757d; user-select: none;">{line_number:>4} | </span>'
+                rendered_lines.append(prefix + highlighted)
+            else:
+                rendered_lines.append(highlighted)
+        return Markup("\n".join(rendered_lines))
+    return Markup(html.escape(text))
 
 
 def _normalize_location(
@@ -737,6 +998,7 @@ def _normalize_location(
     if not any([path, message, snippet, start_line is not None, end_line is not None, role]):
         return {}
 
+    language_key = _snippet_language_from_path(path)
     return {
         "path": path,
         "start_line": start_line,
@@ -744,6 +1006,10 @@ def _normalize_location(
         "message": message,
         "snippet": snippet,
         "has_snippet": bool(snippet),
+        "snippet_html": _highlight_snippet_html(snippet, path=path) if snippet else Markup(""),
+        "language_key": language_key,
+        "language_label": SNIPPET_LANGUAGE_LABELS.get(language_key, "Text"),
+        "language_badge": SNIPPET_LANGUAGE_BADGES.get(language_key, "secondary"),
         "line_label": _line_label(start_line, end_line),
         "display_label": _display_label(path, start_line, end_line),
         "role": role,

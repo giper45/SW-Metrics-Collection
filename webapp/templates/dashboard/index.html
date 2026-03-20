@@ -66,6 +66,12 @@
         max-height: 16rem;
         overflow-y: auto;
     }
+
+    .command-filter-toolbar {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 1rem;
+        background: var(--bs-tertiary-bg);
+    }
 </style>
 {% endblock %}
 
@@ -212,59 +218,6 @@
         </section>
 
         <section class="mb-5">
-            <div class="card shadow-sm">
-                <div class="card-header bg-white">
-                    <h2 class="h5 mb-0">Guided Run</h2>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-light border mb-4">
-                        <div class="fw-semibold mb-1">Recommended flow</div>
-                        <div class="small text-body-secondary">
-                            Use <code>case-study</code> for the full end-to-end workflow, <code>collect-all</code> for raw collection only, and <code>experiment</code> when you want the experiment alias.
-                        </div>
-                    </div>
-
-                    <form method="post" action="{{ url_for('main.run_target') }}" class="row g-3" data-submit-feedback data-ajax-queue>
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
-                        <div class="col-lg-5">
-                            <label for="target" class="form-label">Target</label>
-                            <select id="target" name="target" class="form-select" required>
-                                {% for category, targets in grouped_targets %}
-                                    {% if targets %}
-                                        <optgroup label="{{ category }}">
-                                            {% for target in targets %}
-                                                <option value="{{ target.name }}">
-                                                    {{ target.display_name }} · {{ target.name }}{% if target.short_description %} - {{ target.short_description }}{% endif %}
-                                                </option>
-                                            {% endfor %}
-                                        </optgroup>
-                                    {% endif %}
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div class="col-lg-7">
-                            <label for="env_overrides" class="form-label">Environment overrides</label>
-                            <textarea
-                                id="env_overrides"
-                                name="env_overrides"
-                                class="form-control"
-                                rows="3"
-                                placeholder="JAVA_BUILD_BYTECODE=1&#10;METRIC_RESOURCE_TRACKING=1"
-                            ></textarea>
-                            <div class="form-text">Use one <code>KEY=VALUE</code> pair per line.</div>
-                        </div>
-
-                        <div class="col-12 d-flex justify-content-end">
-                            <button type="submit" class="btn btn-primary" data-loading-text="Queueing target...">Queue Target</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </section>
-
-        <section class="mb-5">
             <form id="advanced-selection-form" method="post" action="{{ url_for('main.run_selected_targets') }}" data-submit-feedback data-ajax-queue>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="card shadow-sm">
@@ -272,12 +225,46 @@
                         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                             <div>
                                 <h2 class="h5 mb-1">Select Commands</h2>
-                                <p class="text-body-secondary mb-0">Select one or more targets from the logical groups below, then queue them from the right sidebar whenever you are ready.</p>
+                                <p class="text-body-secondary mb-0">Select one or more targets from the logical groups below, then queue them from the right sidebar whenever you are ready. Language badges mark generic collectors versus language-specific ones.</p>
                             </div>
                             <span class="badge text-bg-secondary">Advanced</span>
                         </div>
                     </div>
                     <div class="card-body">
+                        <div class="command-filter-toolbar p-3 mb-4">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-lg-6">
+                                    <label for="advanced-command-search" class="form-label mb-1">Search commands</label>
+                                    <input
+                                        id="advanced-command-search"
+                                        type="search"
+                                        class="form-control"
+                                        placeholder="Search by name, target, description, or dependency"
+                                        autocomplete="off"
+                                    >
+                                </div>
+                                <div class="col-lg-4">
+                                    <label for="advanced-language-filter" class="form-label mb-1">Language</label>
+                                    <select id="advanced-language-filter" class="form-select">
+                                        <option value="">All languages</option>
+                                        {% for scope in advanced_scope_filters %}
+                                            <option value="{{ scope.value }}">{{ scope.label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 d-grid">
+                                    <button type="button" id="advanced-filter-reset" class="btn btn-outline-secondary">Reset</button>
+                                </div>
+                            </div>
+                            <div class="small text-body-secondary mt-2">
+                                Use search for fast command lookup, or narrow the list to Generic, Java, Python, and PHP collectors.
+                            </div>
+                        </div>
+
+                        <div id="advanced-filter-empty" class="alert alert-light border d-none mb-4">
+                            No commands match the current search and language filters.
+                        </div>
+
                         <div class="accordion" id="advancedTargetsAccordion">
                             {% for category, targets in advanced_sections %}
                                 <div class="accordion-item">
@@ -291,7 +278,7 @@
                                             aria-controls="collapse-{{ loop.index }}"
                                         >
                                             <span class="me-2">{{ category }}</span>
-                                            <span class="badge text-bg-light">{{ targets | length }}</span>
+                                            <span class="badge text-bg-light" data-target-count data-total-count="{{ targets | length }}">{{ targets | length }}</span>
                                         </button>
                                     </h2>
                                     <div
@@ -304,7 +291,12 @@
                                             <div class="row g-3">
                                                 {% for target in targets %}
                                                     <div class="col-12">
-                                                        <label class="target-option d-flex align-items-start gap-3 p-3 w-100">
+                                                        <label
+                                                            class="target-option d-flex align-items-start gap-3 p-3 w-100"
+                                                            data-target-summary="{{ category }}{% if target.has_collector_scope %} · {{ target.collector_scope_label }}{% endif %}"
+                                                            data-target-scope="{{ target.collector_scope or '' }}"
+                                                            data-target-search="{{ target.display_name }} {{ target.name }} {{ category }} {{ target.description or '' }} {{ target.dependencies | join(' ') }} {{ target.collector_scope_label if target.has_collector_scope else '' }}"
+                                                        >
                                                             <input class="form-check-input mt-1" type="checkbox" name="targets" value="{{ target.name }}">
                                                             <div class="flex-grow-1">
                                                                 <div class="d-flex justify-content-between align-items-start gap-3">
@@ -312,13 +304,24 @@
                                                                         <div class="fw-semibold">{{ target.display_name }}</div>
                                                                         <code class="small">{{ target.name }}</code>
                                                                     </div>
-                                                                    {% if category == "Software Metrics" %}
-                                                                        <span class="badge text-bg-primary">software-metrics</span>
-                                                                    {% elif category == "Vulnerabilities" %}
-                                                                        <span class="badge text-bg-danger">vulnerabilities</span>
-                                                                    {% elif category == "Pipelines" %}
-                                                                        <span class="badge text-bg-info">pipeline</span>
-                                                                    {% endif %}
+                                                                    <div class="d-flex flex-wrap justify-content-end gap-2">
+                                                                        {% if category == "Software Metrics" %}
+                                                                            <span class="badge text-bg-primary">software-metrics</span>
+                                                                        {% elif category == "Vulnerabilities" %}
+                                                                            <span class="badge text-bg-danger">vulnerabilities</span>
+                                                                        {% elif category == "Pipelines" %}
+                                                                            <span class="badge text-bg-info">pipeline</span>
+                                                                        {% endif %}
+                                                                        {% if target.has_collector_scope %}
+                                                                            <span
+                                                                                class="badge text-bg-{{ target.collector_scope_badge }}"
+                                                                                data-bs-toggle="tooltip"
+                                                                                title="{{ target.collector_scope_description }}"
+                                                                            >
+                                                                                {{ target.collector_scope_label }}
+                                                                            </span>
+                                                                        {% endif %}
+                                                                    </div>
                                                                 </div>
                                                                 {% if target.short_description %}
                                                                     <div
@@ -654,11 +657,50 @@
         const targetCheckboxes = Array.from(
             advancedSelectionForm.querySelectorAll('input[type="checkbox"][name="targets"]')
         );
+        const commandSearchInput = document.getElementById('advanced-command-search');
+        const languageFilterSelect = document.getElementById('advanced-language-filter');
+        const resetFiltersButton = document.getElementById('advanced-filter-reset');
+        const advancedFilterEmpty = document.getElementById('advanced-filter-empty');
+        const accordionItems = Array.from(document.querySelectorAll('#advancedTargetsAccordion .accordion-item'));
         const selectedTargetCount = document.getElementById('selected-target-count');
         const selectedTargetEmpty = document.getElementById('selected-target-empty');
         const selectedTargetList = document.getElementById('selected-target-list');
         const sidebarQueueButton = document.getElementById('sidebar-queue-button');
         const sidebarClearButton = document.getElementById('sidebar-clear-selection');
+
+        const renderAdvancedFilters = () => {
+            const query = (commandSearchInput?.value || '').trim().toLowerCase();
+            const scope = (languageFilterSelect?.value || '').trim().toLowerCase();
+            let visibleTargets = 0;
+
+            accordionItems.forEach((accordionItem) => {
+                const targetOptions = Array.from(accordionItem.querySelectorAll('.target-option'));
+                let visibleInGroup = 0;
+
+                targetOptions.forEach((targetOption) => {
+                    const searchText = (targetOption.dataset.targetSearch || '').toLowerCase();
+                    const targetScope = (targetOption.dataset.targetScope || '').toLowerCase();
+                    const optionContainer = targetOption.closest('.col-12');
+                    const matchesQuery = !query || searchText.includes(query);
+                    const matchesScope = !scope || targetScope === scope;
+                    const isVisible = matchesQuery && matchesScope;
+
+                    optionContainer?.classList.toggle('d-none', !isVisible);
+                    if (isVisible) {
+                        visibleInGroup += 1;
+                        visibleTargets += 1;
+                    }
+                });
+
+                accordionItem.classList.toggle('d-none', visibleInGroup === 0);
+                const groupCount = accordionItem.querySelector('[data-target-count]');
+                if (groupCount) {
+                    groupCount.textContent = String(visibleInGroup);
+                }
+            });
+
+            advancedFilterEmpty?.classList.toggle('d-none', visibleTargets > 0);
+        };
 
         const renderSelectionSummary = () => {
             const selectedTargets = targetCheckboxes.filter((checkbox) => checkbox.checked);
@@ -689,11 +731,11 @@
                 return;
             }
 
-            selectedTargets.forEach((checkbox, index) => {
+                selectedTargets.forEach((checkbox, index) => {
                 const targetOption = checkbox.closest('.target-option');
                 const targetName =
                     targetOption?.querySelector('.fw-semibold')?.textContent?.trim() || checkbox.value;
-                const targetBadge = targetOption?.querySelector('.badge')?.textContent?.trim();
+                const targetBadge = targetOption?.dataset.targetSummary || '';
                 const listItem = document.createElement('div');
                 listItem.className = 'list-group-item';
 
@@ -725,10 +767,23 @@
         targetCheckboxes.forEach((checkbox) => {
             checkbox.addEventListener('change', renderSelectionSummary);
         });
+        commandSearchInput?.addEventListener('input', renderAdvancedFilters);
+        languageFilterSelect?.addEventListener('change', renderAdvancedFilters);
+        resetFiltersButton?.addEventListener('click', () => {
+            if (commandSearchInput) {
+                commandSearchInput.value = '';
+            }
+            if (languageFilterSelect) {
+                languageFilterSelect.value = '';
+            }
+            renderAdvancedFilters();
+            commandSearchInput?.focus();
+        });
         advancedSelectionForm.addEventListener('reset', () => {
             window.setTimeout(renderSelectionSummary, 0);
         });
 
+        renderAdvancedFilters();
         renderSelectionSummary();
     }
 </script>

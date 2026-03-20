@@ -75,7 +75,11 @@ def test_login_then_access_dashboard(tmp_path):
     assert "Software Metrics" in html
     assert "Vulnerabilities" in html
     assert "Vulnerability Metrics" in html
+    assert "Select Commands" in html
+    assert "Search commands" in html
+    assert "All languages" in html
     assert "Selection Queue" in html
     assert "Queue Selected" in html
     assert "No commands selected yet." in html
     assert "Queue Selected Targets" not in html
+    assert "Guided Run" not in html
