@@ -6,6 +6,7 @@ import uuid
 
 from flask import (
     Blueprint,
+    Response,
     abort,
     current_app,
     flash,
@@ -29,6 +30,9 @@ from .services.results import (
     build_insights_overview,
     build_metrics_view,
     build_vulnerability_view,
+    export_metric_rows_csv,
+    export_metrics_vulnerability_matrix_csv,
+    export_vulnerability_findings_csv,
     format_number,
     load_result_rows,
     metric_badge,
@@ -108,6 +112,22 @@ def _queue_success_response(message: str, *, job_ids: list[str]) -> tuple:
         )
     flash(message, "success")
     return redirect(url_for("main.job_detail", job_id=job_ids[0]))
+
+
+def _non_empty_filters(filters: dict[str, str]) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in filters.items()
+        if str(value or "").strip()
+    }
+
+
+def _csv_download_response(filename: str, payload: str) -> Response:
+    return Response(
+        payload,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _queue_error_response(message: str, status_code: int = 400):
@@ -228,22 +248,29 @@ def insights_overview():
 @login_required
 def insights_vulnerabilities():
     rows = _result_rows()
+    filters = {
+        "source": request.args.get("source", ""),
+        "project": request.args.get("project", ""),
+        "tool": request.args.get("tool", ""),
+        "run_id": request.args.get("run_id", ""),
+        "component": request.args.get("component", ""),
+        "severity": request.args.get("severity", ""),
+        "search": request.args.get("search", ""),
+    }
     view_data = build_vulnerability_view(
         rows,
-        {
-            "source": request.args.get("source", ""),
-            "project": request.args.get("project", ""),
-            "tool": request.args.get("tool", ""),
-            "run_id": request.args.get("run_id", ""),
-            "component": request.args.get("component", ""),
-            "severity": request.args.get("severity", ""),
-            "search": request.args.get("search", ""),
-        },
+        filters,
         src_dir=current_app.config["SRC_DIR"],
     )
     return render_template(
         "insights/vulnerabilities.html",
         view_data=view_data,
+        export_urls={
+            "findings_csv": url_for(
+                "main.insights_vulnerabilities_export_csv",
+                **_non_empty_filters(view_data["filters"]),
+            ),
+        },
         severity_badge=severity_badge,
         source_label=source_label,
         tool_badge=tool_badge,
@@ -257,7 +284,75 @@ def insights_vulnerabilities():
 @login_required
 def insights_metrics():
     rows = _result_rows()
+    filters = {
+        "source": request.args.get("source", ""),
+        "project": request.args.get("project", ""),
+        "metric": request.args.get("metric", ""),
+        "tool": request.args.get("tool", ""),
+        "collector_scope": request.args.get("collector_scope", ""),
+        "component_type": request.args.get("component_type", ""),
+        "run_id": request.args.get("run_id", ""),
+        "status": request.args.get("status", ""),
+        "search": request.args.get("search", ""),
+    }
     view_data = build_metrics_view(
+        rows,
+        filters,
+    )
+    return render_template(
+        "insights/metrics.html",
+        view_data=view_data,
+        export_urls={
+            "metrics_csv": url_for(
+                "main.insights_metrics_export_csv",
+                **_non_empty_filters(view_data["filters"]),
+            ),
+            "matrix_csv": url_for(
+                "main.insights_metrics_export_matrix_csv",
+                **_non_empty_filters(view_data["filters"]),
+            ),
+            "findings_csv": url_for(
+                "main.insights_vulnerabilities_export_csv",
+                **_non_empty_filters(
+                    {
+                        "source": view_data["filters"].get("source", ""),
+                        "project": view_data["filters"].get("project", ""),
+                    }
+                ),
+            ),
+        },
+        metric_badge=metric_badge,
+        source_label=source_label,
+        tool_badge=tool_badge,
+        tool_label=tool_label,
+        format_number=format_number,
+    )
+
+
+@bp.route("/insights/vulnerabilities/export.csv")
+@login_required
+def insights_vulnerabilities_export_csv():
+    rows = _result_rows()
+    payload = export_vulnerability_findings_csv(
+        rows,
+        {
+            "source": request.args.get("source", ""),
+            "project": request.args.get("project", ""),
+            "tool": request.args.get("tool", ""),
+            "run_id": request.args.get("run_id", ""),
+            "component": request.args.get("component", ""),
+            "severity": request.args.get("severity", ""),
+            "search": request.args.get("search", ""),
+        },
+    )
+    return _csv_download_response("vulnerability-findings-export.csv", payload)
+
+
+@bp.route("/insights/metrics/export.csv")
+@login_required
+def insights_metrics_export_csv():
+    rows = _result_rows()
+    payload = export_metric_rows_csv(
         rows,
         {
             "source": request.args.get("source", ""),
@@ -271,15 +366,28 @@ def insights_metrics():
             "search": request.args.get("search", ""),
         },
     )
-    return render_template(
-        "insights/metrics.html",
-        view_data=view_data,
-        metric_badge=metric_badge,
-        source_label=source_label,
-        tool_badge=tool_badge,
-        tool_label=tool_label,
-        format_number=format_number,
+    return _csv_download_response("software-metrics-export.csv", payload)
+
+
+@bp.route("/insights/metrics/export-matrix.csv")
+@login_required
+def insights_metrics_export_matrix_csv():
+    rows = _result_rows()
+    payload = export_metrics_vulnerability_matrix_csv(
+        rows,
+        {
+            "source": request.args.get("source", ""),
+            "project": request.args.get("project", ""),
+            "metric": request.args.get("metric", ""),
+            "tool": request.args.get("tool", ""),
+            "collector_scope": request.args.get("collector_scope", ""),
+            "component_type": request.args.get("component_type", ""),
+            "run_id": request.args.get("run_id", ""),
+            "status": request.args.get("status", ""),
+            "search": request.args.get("search", ""),
+        },
     )
+    return _csv_download_response("metrics-vulnerabilities-matrix-export.csv", payload)
 
 
 @bp.route("/jobs")

@@ -52,6 +52,8 @@ CODEQL_DOCKER_ENV := \
 	collect-coverage-jacoco \
 	collect-vulnerability-dependency-check \
 	collect-vulnerability-codeql-java \
+	collect-vulnerability-exakat-php \
+	collect-vulnerability-rips-scanner \
 	collect-vulnerability-psalm-php \
 	collect-vulnerability-pmd-security \
 	collect-vulnerability-pmd-jsp-security \
@@ -204,6 +206,18 @@ collect-vulnerability-codeql-java:
 	@# Run the CodeQL collector on an amd64 container against the repositories in src/.
 	$(DOCKER_RUN_METRIC_AMD64) $(CODEQL_DOCKER_ENV) vulnerability-codeql-java:latest
 
+collect-vulnerability-exakat-php:
+	@# Build the Exakat collector image.
+	$(DOCKER_BUILD_METRIC) -t vulnerability-exakat-php:latest metrics/vulnerability/php/vulnerability-exakat-php
+	@# Run the Exakat collector against the repositories mounted under src/.
+	$(DOCKER_RUN_METRIC) vulnerability-exakat-php:latest
+
+collect-vulnerability-rips-scanner:
+	@# Build the RIPS collector image.
+	$(DOCKER_BUILD_METRIC) -t vulnerability-rips-scanner:latest metrics/vulnerability/php/vulnerability-rips-scanner
+	@# Run the RIPS collector against the repositories mounted under src/.
+	$(DOCKER_RUN_METRIC) vulnerability-rips-scanner:latest
+
 collect-vulnerability-psalm-php:
 	@# Build the Psalm collector image.
 	$(DOCKER_BUILD_METRIC) -t vulnerability-psalm-php:latest metrics/vulnerability/php/vulnerability-psalm-php
@@ -238,7 +252,7 @@ collect-size-all: collect-loc-cloc collect-loc-tokei collect-loc-scc collect-cla
 collect-complexity-all: collect-cc-lizard collect-cc-ck
 collect-coupling-all: collect-ce-ca-jdepend collect-ce-ca-ck-cbo
 collect-cohesion-all: collect-lcom-ck collect-lcom-ckjm
-collect-vulnerability-all: collect-vulnerability-dependency-check collect-vulnerability-codeql-java collect-vulnerability-psalm-php collect-vulnerability-pmd-security  collect-vulnerability-pmd-jsp-security collect-vulnerability-spotbugs-findsecbugs collect-vulnerability-spotbugs-findsecbugs
+collect-vulnerability-all: collect-vulnerability-dependency-check collect-vulnerability-codeql-java collect-vulnerability-exakat-php collect-vulnerability-rips-scanner collect-vulnerability-psalm-php collect-vulnerability-pmd-security collect-vulnerability-pmd-jsp-security collect-vulnerability-spotbugs-findsecbugs
 collect-paper-extras: collect-duplication-jscpd collect-mi-halstead-java collect-coverage-jacoco
 
 prepare-java-bytecode:
@@ -289,6 +303,8 @@ print-experiment:
 	@printf "%-35s %-55s %s\n" "coverage-jacoco:latest" "metrics/testing/java/coverage-jacoco" "test-coverage"
 	@printf "%-35s %-55s %s\n" "vulnerability-dependency-check:latest" "metrics/vulnerability/java/vulnerability-dependency-check" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-codeql-java:latest" "metrics/vulnerability/java/vulnerability-codeql-java" "vulnerability-findings"
+	@printf "%-35s %-55s %s\n" "vulnerability-exakat-php:latest" "metrics/vulnerability/php/vulnerability-exakat-php" "vulnerability-findings"
+	@printf "%-35s %-55s %s\n" "vulnerability-rips-scanner:latest" "metrics/vulnerability/php/vulnerability-rips-scanner" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-psalm-php:latest" "metrics/vulnerability/php/vulnerability-psalm-php" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-pmd-security:latest" "metrics/vulnerability/java/vulnerability-pmd-security" "vulnerability-findings"
 	@printf "%-35s %-55s %s\n" "vulnerability-pmd-jsp-security:latest" "metrics/vulnerability/web/vulnerability-pmd-jsp-security" "vulnerability-findings"
@@ -310,7 +326,7 @@ manifest:
 		--out $(RESULTS_DIR)/manifest-$(CASE_STUDY_RUN_ID).json \
 		--primary-component-type file \
 		--language java \
-		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,class-count:javaparser:javaparser-default,package-count:javaparser:javaparser-default,cc:lizard:lizard-default,wmc:ck:ck-raw,nom:ck:ck-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,lcom:ck:ck-default,lcom:ckjm:ckjm-default,vulnerability-findings:dependency-check:dependency-check-default,vulnerability-findings:codeql:codeql-java-security-extended,vulnerability-findings:pmd:pmd-java-security,vulnerability-findings:pmd:pmd-jsp-security,vulnerability-findings:spotbugs:spotbugs-findsecbugs-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,test-coverage:jacoco:jacoco-default'
+		--expected 'loc:cloc:cloc-default,loc:tokei:tokei-default,loc:scc:scc-default,class-count:javaparser:javaparser-default,package-count:javaparser:javaparser-default,cc:lizard:lizard-default,wmc:ck:ck-raw,nom:ck:ck-raw,ce-ca:jdepend:jdepend-default,ce-ca:ck:ck-ce-ca-proxy,lcom:ck:ck-default,lcom:ckjm:ckjm-default,vulnerability-findings:dependency-check:dependency-check-default,vulnerability-findings:codeql:codeql-java-security-extended,vulnerability-findings:exakat:exakat-php-security,vulnerability-findings:pmd:pmd-java-security,vulnerability-findings:pmd:pmd-jsp-security,vulnerability-findings:psalm:psalm-php-taint-analysis,vulnerability-findings:spotbugs:spotbugs-findsecbugs-default,duplication-rate:jscpd:jscpd-default,maintainability-index:java-halstead-analyzer:mi-halstead-default,test-coverage:jacoco:jacoco-default'
 
 normalize:
 	@# Normalize raw metric outputs into the shared JSONL schema.

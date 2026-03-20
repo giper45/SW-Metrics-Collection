@@ -22,6 +22,8 @@ ENV JAVA_INVENTORY_CLASSPATH="/opt/metric/bin:/opt/metric/lib/javaparser-core.ja
 ENV JAVA_INVENTORY_MAIN_CLASS="JavaInventoryTool"
 ENV JAVAPARSER_VERSION="${JAVAPARSER_VERSION}"
 
-RUN chmod +x /opt/metric/run.sh
+RUN chmod 644 /opt/metric/*.py \
+    && chmod 644 /opt/metric/common/*.py \
+    && chmod +x /opt/metric/run.sh
 
 ENTRYPOINT ["/opt/metric/run.sh"]

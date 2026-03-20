@@ -97,6 +97,12 @@ def test_discover_make_targets_formats_display_names(tmp_path: Path):
                 "collect-vulnerability-codeql-java:",
                 "\t@echo vuln",
                 "",
+                "collect-vulnerability-exakat-php:",
+                "\t@echo exakat",
+                "",
+                "collect-vulnerability-rips-scanner:",
+                "\t@echo rips",
+                "",
                 "collect-vulnerability-psalm-php:",
                 "\t@echo psalm",
                 "collect-vulnerability-pmd-jsp-security:",
@@ -113,6 +119,8 @@ def test_discover_make_targets_formats_display_names(tmp_path: Path):
 
     assert targets["collect-loc-cloc"] == "CLOC"
     assert targets["collect-vulnerability-codeql-java"] == "CodeQL"
+    assert targets["collect-vulnerability-exakat-php"] == "Exakat"
+    assert targets["collect-vulnerability-rips-scanner"] == "RIPS"
     assert targets["collect-vulnerability-psalm-php"] == "Psalm"
     assert targets["collect-vulnerability-pmd-jsp-security"] == "PMD (JSP)"
     assert targets["collect-class-count-javaparser"] == "JavaParser (Class Count)"
@@ -131,6 +139,12 @@ def test_discover_make_targets_extracts_collector_scopes(tmp_path: Path):
                 "",
                 "collect-vulnerability-psalm-php:",
                 "\tdocker build -t vulnerability-psalm-php metrics/vulnerability/php/vulnerability-psalm-php",
+                "",
+                "collect-vulnerability-exakat-php:",
+                "\tdocker build -t vulnerability-exakat-php metrics/vulnerability/php/vulnerability-exakat-php",
+                "",
+                "collect-vulnerability-rips-scanner:",
+                "\tdocker build -t vulnerability-rips-scanner metrics/vulnerability/php/vulnerability-rips-scanner",
             ]
         ),
         encoding="utf-8",
@@ -142,6 +156,8 @@ def test_discover_make_targets_extracts_collector_scopes(tmp_path: Path):
     assert targets["collect-loc-cloc"].collector_scope_label == "Generic"
     assert targets["collect-cc-radon"].collector_scope == "python"
     assert targets["collect-vulnerability-psalm-php"].collector_scope == "php"
+    assert targets["collect-vulnerability-exakat-php"].collector_scope == "php"
+    assert targets["collect-vulnerability-rips-scanner"].collector_scope == "php"
 
 
 def test_group_targets_places_preparation_first(tmp_path: Path):

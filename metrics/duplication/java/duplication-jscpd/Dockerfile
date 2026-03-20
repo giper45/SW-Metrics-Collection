@@ -15,6 +15,8 @@ ENV JSCPD_VERSION=${JSCPD_VERSION}
 WORKDIR /opt/metric
 COPY collect.py run.sh ./
 COPY --from=repo_common *.py /opt/metric/common/
-RUN chmod +x /opt/metric/run.sh
+RUN chmod 644 /opt/metric/*.py \
+    && chmod 644 /opt/metric/common/*.py \
+    && chmod +x /opt/metric/run.sh
 
 ENTRYPOINT ["/opt/metric/run.sh"]

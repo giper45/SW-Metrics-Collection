@@ -1,6 +1,6 @@
 # MAVIS (Metric And Vulnerability Integrated Suite)
 
-MAVIS (Metric And Vulnerability Integrated Suite) is a microservices-based architecture for unified and normalized software metric collection, focused primarily on Java projects with PHP vulnerability scanning support via Psalm.
+MAVIS (Metric And Vulnerability Integrated Suite) is a microservices-based architecture for unified and normalized software metric collection, focused primarily on Java projects with PHP vulnerability scanning support via Psalm, Exakat, and RIPS.
 
 Public repository: [https://github.com/giper45/SW-Metrics-Collection](https://github.com/giper45/SW-Metrics-Collection)
 
@@ -19,10 +19,10 @@ Public repository: [https://github.com/giper45/SW-Metrics-Collection](https://gi
 | Maintainability | Maintainability Index (+ Halstead aggregates) | `mi-halstead-java` |
 | Quality | Static warnings | `static-warnings-checkstyle` |
 | Testing | Coverage ratio | `coverage-jacoco` |
-| Vulnerability | Vulnerability findings | `vulnerability-spotbugs-findsecbugs`, `vulnerability-dependency-check`, `vulnerability-codeql-java`, `vulnerability-psalm-php`, `vulnerability-pmd-security`, `vulnerability-pmd-jsp-security |
+| Vulnerability | Vulnerability findings | `vulnerability-spotbugs-findsecbugs`, `vulnerability-dependency-check`, `vulnerability-codeql-java`, `vulnerability-exakat-php`, `vulnerability-rips-scanner`, `vulnerability-psalm-php`, `vulnerability-pmd-security`, `vulnerability-pmd-jsp-security` |
 | Evolution | Code churn | `churn-git` |
 
-Implemented metric containers: **20**.
+Implemented metric collectors in the matrix above: **22**.
 
 For vulnerability collectors, the raw interchange contract is **SARIF 2.1.0**.
 Scanners that already support SARIF emit it natively; scanners with non-SARIF native
@@ -41,12 +41,7 @@ The canonical pipeline output remains JSONL, while secondary SARIF artifacts are
 - `metrics/maintainability/java/`
 - `metrics/quality/java/`
 - `metrics/testing/java/`
-<<<<<<< HEAD
-- `metrics/vulnerability/java/`
-- `metrics/vulnerability/php/`
-=======
-- `metrics/vulnerability/java/`, `metrics/vulnerability/web/`
->>>>>>> abe40f28477e375f8dd50e478a64d14c07753f4a
+- `metrics/vulnerability/java/`, `metrics/vulnerability/php/`, `metrics/vulnerability/web/`
 - `metrics/evolution/generic/`
 - `metrics/validate-results/generic/jsonl-schema-validator/`
 - `metrics/generic/normalized-collector/`
@@ -149,6 +144,8 @@ make collect-static-warnings-checkstyle
 make collect-coverage-jacoco
 make collect-vulnerability-dependency-check
 make collect-vulnerability-codeql-java
+make collect-vulnerability-exakat-php
+make collect-vulnerability-rips-scanner
 make collect-vulnerability-psalm-php
 make collect-vulnerability-pmd-security
 make collect-vulnerability-pmd-jsp-security
@@ -169,17 +166,15 @@ The Java collector also supports `CODEQL_JAVA_BUILD_MODE`, `CODEQL_JAVA_BUILD_CO
 For experimental extractor behavior, you can also pass `CODEQL_EXTRACTOR_JAVA_JSP=true`
 to the CodeQL container, but this should be treated as best-effort rather than stable support.
 For a lighter offline Java SAST pass, `collect-vulnerability-pmd-security` uses PMD's
-<<<<<<< HEAD
-built-in `category/java/security.xml` ruleset.
-For PHP repositories, `collect-vulnerability-psalm-php` runs Psalm with taint analysis enabled
-and emits raw SARIF plus normalized JSONL vulnerability rows.
-=======
 built-in `category/java/security.xml` ruleset, while `collect-vulnerability-pmd-jsp-security`
 uses PMD's `category/jsp/security.xml` ruleset for JSP templates.
 Collector containers now run with the host user's `UID:GID` by default, so files written
 under `results/` stay deletable without `sudo`. Older root-owned outputs can be repaired with
 `make repair-output-permissions`.
->>>>>>> abe40f28477e375f8dd50e478a64d14c07753f4a
+For PHP repositories, `collect-vulnerability-psalm-php` runs Psalm with taint analysis enabled,
+`collect-vulnerability-exakat-php` uses Exakat's security ruleset, and
+`collect-vulnerability-rips-scanner` adapts the community RIPS HTML report into SARIF plus
+normalized JSONL vulnerability rows.
 `make normalize-vulnerability-sarif` creates canonical normalized SARIF only for missing
 vulnerability artifacts, reusing raw SARIF when available and falling back to embedded JSONL findings otherwise.
 

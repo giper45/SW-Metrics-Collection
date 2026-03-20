@@ -12,7 +12,9 @@ RUN apt-get update \
 WORKDIR /opt/collector
 COPY collect.py validator.py run.sh ./
 COPY --from=repo_common *.py /opt/collector/common/
-RUN chmod +x /opt/collector/run.sh
+RUN chmod 644 /opt/collector/*.py \
+    && chmod 644 /opt/collector/common/*.py \
+    && chmod +x /opt/collector/run.sh
 
 ENV APP_ROOT=/app
 ENV RESULTS_ROOT=/results

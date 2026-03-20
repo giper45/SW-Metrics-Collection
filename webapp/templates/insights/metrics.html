@@ -26,7 +26,15 @@
         <h1 class="h2 mb-2">Software Metrics</h1>
         <p class="text-body-secondary mb-0">Inspect collected measurements across runs, collector scopes, tools, components, and normalized sources.</p>
     </div>
-    <a href="{{ url_for('main.insights_overview') }}" class="btn btn-outline-secondary">Back to Insights</a>
+    <div class="d-flex flex-column align-items-start align-items-md-end gap-2">
+        <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+            <a href="{{ export_urls.matrix_csv }}" class="btn btn-primary">Export Metrics + Vulnerabilities CSV</a>
+            <a href="{{ export_urls.metrics_csv }}" class="btn btn-outline-primary">Export Metrics CSV</a>
+            <a href="{{ export_urls.findings_csv }}" class="btn btn-outline-danger">Export CVE Findings CSV</a>
+            <a href="{{ url_for('main.insights_overview') }}" class="btn btn-outline-secondary">Back to Insights</a>
+        </div>
+        <p class="small text-body-secondary mb-0">The analysis matrix works best with component-level filters, especially module-level metrics.</p>
+    </div>
 </div>
 
 <div class="row g-4">

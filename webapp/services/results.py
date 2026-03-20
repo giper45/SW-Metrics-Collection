@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
 from collections import Counter, defaultdict
 import html
+import io
 import json
 from pathlib import Path
 import re
@@ -56,6 +58,7 @@ TOOL_LABELS = {
     "ckjm": "CKJM",
     "ckjm-ext": "CKJM Extended",
     "dependency-check": "Dependency-Check",
+    "exakat": "Exakat",
     "findsecbugs": "FindSecBugs",
     "git": "Git",
     "grype": "Grype",
@@ -68,6 +71,7 @@ TOOL_LABELS = {
     "pmd": "PMD",
     "psalm": "Psalm",
     "radon": "Radon",
+    "rips": "RIPS",
     "semgrep": "Semgrep",
     "scc": "SCC",
     "spotbugs": "SpotBugs",
@@ -81,6 +85,7 @@ TOOL_BADGES = {
     "ckjm": "secondary",
     "ckjm-ext": "secondary",
     "dependency-check": "warning",
+    "exakat": "primary",
     "findsecbugs": "warning",
     "git": "dark",
     "grype": "danger",
@@ -93,6 +98,7 @@ TOOL_BADGES = {
     "pmd": "danger",
     "psalm": "primary",
     "radon": "success",
+    "rips": "primary",
     "semgrep": "success",
     "scc": "info",
     "spotbugs": "warning",
@@ -130,6 +136,7 @@ SNIPPET_LANGUAGE_BADGES = {
 }
 SNIPPET_FORMATTER = HtmlFormatter(nowrap=True, noclasses=True) if HtmlFormatter else None
 SNIPPET_LINE_RE = re.compile(r"^\s*(\d+)\s+\|\s?(.*)$")
+CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
 
 
 def load_result_rows(results_dir: Path, normalized_dir: Path) -> list[dict[str, Any]]:
@@ -193,41 +200,7 @@ def build_vulnerability_view(
     *,
     src_dir: Path | None = None,
 ) -> dict[str, Any]:
-    vulnerability_rows = [
-        row
-        for row in rows
-        if row.get("metric") == VULNERABILITY_METRIC and _is_total_vulnerability_row(row)
-    ]
-
-    options = {
-        "sources": _option_values(vulnerability_rows, "_source"),
-        "projects": _option_values(vulnerability_rows, "project"),
-        "tools": _option_values(vulnerability_rows, "tool"),
-        "runs": _option_values(vulnerability_rows, "run_id"),
-        "components": _option_values(vulnerability_rows, "component"),
-    }
-
-    source_candidates = [
-        row
-        for row in vulnerability_rows
-        if _match_filter(row.get("project"), filters.get("project"))
-        and _match_filter(row.get("tool"), filters.get("tool"))
-        and _match_filter(row.get("run_id"), filters.get("run_id"))
-        and _match_filter(row.get("component"), filters.get("component"))
-    ]
-    selected_source = filters.get("source") or preferred_source(source_candidates) or preferred_source(vulnerability_rows)
-    severity_filter = (filters.get("severity") or "").strip().lower()
-    search = (filters.get("search") or "").strip().lower()
-
-    filtered_rows = [
-        row
-        for row in vulnerability_rows
-        if _match_filter(row.get("_source"), selected_source)
-        and _match_filter(row.get("project"), filters.get("project"))
-        and _match_filter(row.get("tool"), filters.get("tool"))
-        and _match_filter(row.get("run_id"), filters.get("run_id"))
-        and _match_filter(row.get("component"), filters.get("component"))
-    ]
+    filtered_rows, options, selected_source, severity_filter, search = _filter_vulnerability_rows(rows, filters)
 
     entries: list[dict[str, Any]] = []
     visible_findings_all: list[dict[str, Any]] = []
@@ -344,60 +317,7 @@ def build_metrics_view(
     rows: list[dict[str, Any]],
     filters: dict[str, str],
 ) -> dict[str, Any]:
-    metric_rows = [_decorate_metric_row(row) for row in rows if row.get("metric") != VULNERABILITY_METRIC]
-
-    options = {
-        "sources": _option_values(metric_rows, "_source"),
-        "projects": _option_values(metric_rows, "project"),
-        "metrics": _option_values(metric_rows, "metric"),
-        "tools": _option_values(metric_rows, "tool"),
-        "collector_scopes": _collector_scope_options(metric_rows),
-        "component_types": _option_values(metric_rows, "component_type"),
-        "runs": _option_values(metric_rows, "run_id"),
-        "statuses": _option_values(metric_rows, "status"),
-    }
-
-    source_candidates = []
-    for row in metric_rows:
-        if not _match_filter(row.get("project"), filters.get("project")):
-            continue
-        if not _match_filter(row.get("metric"), filters.get("metric")):
-            continue
-        if not _match_filter(row.get("tool"), filters.get("tool")):
-            continue
-        if not _match_filter(row.get("_collector_scope"), filters.get("collector_scope")):
-            continue
-        if not _match_filter(row.get("component_type"), filters.get("component_type")):
-            continue
-        if not _match_filter(row.get("run_id"), filters.get("run_id")):
-            continue
-        if not _match_filter(row.get("status"), filters.get("status")):
-            continue
-        source_candidates.append(row)
-    selected_source = filters.get("source") or preferred_source(source_candidates) or preferred_source(metric_rows)
-    search = (filters.get("search") or "").strip().lower()
-
-    filtered_rows = []
-    for row in metric_rows:
-        if not _match_filter(row.get("_source"), selected_source):
-            continue
-        if not _match_filter(row.get("project"), filters.get("project")):
-            continue
-        if not _match_filter(row.get("metric"), filters.get("metric")):
-            continue
-        if not _match_filter(row.get("tool"), filters.get("tool")):
-            continue
-        if not _match_filter(row.get("_collector_scope"), filters.get("collector_scope")):
-            continue
-        if not _match_filter(row.get("component_type"), filters.get("component_type")):
-            continue
-        if not _match_filter(row.get("run_id"), filters.get("run_id")):
-            continue
-        if not _match_filter(row.get("status"), filters.get("status")):
-            continue
-        if search and search not in _metric_search_blob(row):
-            continue
-        filtered_rows.append(row)
+    filtered_rows, options, selected_source, search = _filter_metric_rows(rows, filters)
 
     metric_groups: list[dict[str, Any]] = []
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
@@ -478,6 +398,276 @@ def build_metrics_view(
             "scope_breakdown": _collector_scope_breakdown(filtered_rows),
         },
     }
+
+
+def export_vulnerability_findings_csv(
+    rows: list[dict[str, Any]],
+    filters: dict[str, str],
+) -> str:
+    filtered_rows, _, _, severity_filter, search = _filter_vulnerability_rows(rows, filters)
+    export_rows: list[dict[str, Any]] = []
+
+    for row in filtered_rows:
+        parameters = row.get("parameters") if isinstance(row.get("parameters"), dict) else {}
+        findings = parameters.get("findings") if isinstance(parameters.get("findings"), list) else []
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            normalized = _normalize_finding(
+                finding,
+                row=row,
+                fallback_component=str(row.get("component", "")).strip(),
+                src_dir=None,
+                snippet_cache={},
+            )
+            if severity_filter and normalized["severity"] != severity_filter:
+                continue
+            if search and search not in _vulnerability_search_blob(row, normalized):
+                continue
+            cve_ids = extract_cve_ids(
+                normalized.get("rule_id"),
+                normalized.get("rule_name"),
+                normalized.get("message"),
+            )
+            primary_location = normalized.get("primary_location") if isinstance(normalized.get("primary_location"), dict) else {}
+            source_location = normalized.get("source_location") if isinstance(normalized.get("source_location"), dict) else {}
+            sink_location = normalized.get("sink_location") if isinstance(normalized.get("sink_location"), dict) else {}
+            export_rows.append(
+                {
+                    "source": row.get("_source"),
+                    "project": row.get("project"),
+                    "component": row.get("component"),
+                    "component_type": row.get("component_type"),
+                    "run_id": row.get("run_id"),
+                    "timestamp_utc": row.get("timestamp_utc"),
+                    "tool": row.get("tool"),
+                    "variant": row.get("variant"),
+                    "status": row.get("status"),
+                    "severity": normalized.get("severity"),
+                    "confidence": normalized.get("confidence"),
+                    "rule_id": normalized.get("rule_id"),
+                    "rule_name": normalized.get("rule_name"),
+                    "message": normalized.get("message"),
+                    "cve_ids": _csv_join(cve_ids),
+                    "cve_primary": cve_ids[0] if cve_ids else "",
+                    "cve_count": len(cve_ids),
+                    "cwe_ids": _csv_join(normalized.get("cwe_ids", [])),
+                    "cwe_count": len(normalized.get("cwe_ids", [])),
+                    "owasp_tags": _csv_join(normalized.get("owasp_tags", [])),
+                    "package_name": normalized.get("package_name"),
+                    "package_version": normalized.get("package_version"),
+                    "dependency_scope": normalized.get("dependency_scope"),
+                    "class_name": normalized.get("class_name"),
+                    "method_name": normalized.get("method_name"),
+                    "fingerprint": normalized.get("fingerprint"),
+                    "source_path": normalized.get("source_path"),
+                    "start_line": normalized.get("start_line"),
+                    "end_line": normalized.get("end_line"),
+                    "primary_path": primary_location.get("path", ""),
+                    "primary_start_line": primary_location.get("start_line"),
+                    "primary_end_line": primary_location.get("end_line"),
+                    "source_location_path": source_location.get("path", ""),
+                    "source_location_line": source_location.get("start_line"),
+                    "sink_location_path": sink_location.get("path", ""),
+                    "sink_location_line": sink_location.get("start_line"),
+                    "flow_path_count": normalized.get("flow_path_count"),
+                }
+            )
+
+    fieldnames = [
+        "source",
+        "project",
+        "component",
+        "component_type",
+        "run_id",
+        "timestamp_utc",
+        "tool",
+        "variant",
+        "status",
+        "severity",
+        "confidence",
+        "rule_id",
+        "rule_name",
+        "message",
+        "cve_ids",
+        "cve_primary",
+        "cve_count",
+        "cwe_ids",
+        "cwe_count",
+        "owasp_tags",
+        "package_name",
+        "package_version",
+        "dependency_scope",
+        "class_name",
+        "method_name",
+        "fingerprint",
+        "source_path",
+        "start_line",
+        "end_line",
+        "primary_path",
+        "primary_start_line",
+        "primary_end_line",
+        "source_location_path",
+        "source_location_line",
+        "sink_location_path",
+        "sink_location_line",
+        "flow_path_count",
+    ]
+    return _write_csv(export_rows, fieldnames)
+
+
+def export_metric_rows_csv(
+    rows: list[dict[str, Any]],
+    filters: dict[str, str],
+) -> str:
+    filtered_rows, _, _, _ = _filter_metric_rows(rows, filters)
+    export_rows = [
+        {
+            "source": row.get("_source"),
+            "project": row.get("project"),
+            "component": row.get("component"),
+            "component_type": row.get("component_type"),
+            "run_id": row.get("run_id"),
+            "timestamp_utc": row.get("timestamp_utc"),
+            "metric": row.get("metric"),
+            "submetric": row.get("submetric"),
+            "measure": _measure_label(row),
+            "value": row.get("value"),
+            "tool": row.get("tool"),
+            "variant": row.get("variant"),
+            "status": row.get("status"),
+            "collector_scope": row.get("_collector_scope"),
+            "collector_scope_label": row.get("_collector_scope_label"),
+        }
+        for row in filtered_rows
+    ]
+    return _write_csv(
+        export_rows,
+        [
+            "source",
+            "project",
+            "component",
+            "component_type",
+            "run_id",
+            "timestamp_utc",
+            "metric",
+            "submetric",
+            "measure",
+            "value",
+            "tool",
+            "variant",
+            "status",
+            "collector_scope",
+            "collector_scope_label",
+        ],
+    )
+
+
+def export_metrics_vulnerability_matrix_csv(
+    rows: list[dict[str, Any]],
+    filters: dict[str, str],
+) -> str:
+    metric_rows, _, selected_source, _ = _filter_metric_rows(rows, filters)
+    vulnerability_rows, _, _, _, _ = _filter_vulnerability_rows(
+        rows,
+        {
+            "source": selected_source,
+            "project": filters.get("project", ""),
+            "tool": "",
+            "run_id": "",
+            "component": "",
+            "severity": "",
+            "search": "",
+        },
+    )
+
+    metrics_by_component: dict[tuple[str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    vulnerability_by_component: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    metric_columns: set[str] = set()
+
+    for row in metric_rows:
+        key = (
+            str(row.get("_source", "")).strip(),
+            str(row.get("project", "")).strip(),
+            str(row.get("component", "")).strip(),
+            str(row.get("component_type", "")).strip(),
+        )
+        metrics_by_component[key].append(row)
+        metric_columns.add(_metric_export_column(row))
+
+    for row in vulnerability_rows:
+        key = (
+            str(row.get("_source", "")).strip(),
+            str(row.get("project", "")).strip(),
+            str(row.get("component", "")).strip(),
+        )
+        vulnerability_by_component[key].append(row)
+
+    ordered_metric_columns = sorted(metric_columns)
+    export_rows: list[dict[str, Any]] = []
+    for key in sorted(metrics_by_component):
+        source, project, component, component_type = key
+        component_rows = metrics_by_component[key]
+        export_row: dict[str, Any] = {
+            "source": source,
+            "project": project,
+            "component": component,
+            "component_type": component_type,
+            "metric_row_count": len(component_rows),
+            "metric_measure_count": len({_metric_export_column(row) for row in component_rows}),
+            "metric_tools": _csv_join(_option_values(component_rows, "tool")),
+            "metric_run_ids": _csv_join(_option_values(component_rows, "run_id")),
+            "metric_latest_timestamp_utc": max(str(row.get("timestamp_utc", "")) for row in component_rows),
+        }
+
+        latest_by_metric: dict[str, dict[str, Any]] = {}
+        for row in component_rows:
+            column_name = _metric_export_column(row)
+            existing = latest_by_metric.get(column_name)
+            if existing is None or str(row.get("timestamp_utc", "")) >= str(existing.get("timestamp_utc", "")):
+                latest_by_metric[column_name] = row
+        for column_name in ordered_metric_columns:
+            metric_row = latest_by_metric.get(column_name)
+            export_row[column_name] = metric_row.get("value") if metric_row else ""
+
+        vulnerability_summary = _aggregate_vulnerability_rows(
+            vulnerability_by_component.get((source, project, component), [])
+        )
+        export_row.update(vulnerability_summary)
+        export_rows.append(export_row)
+
+    fieldnames = [
+        "source",
+        "project",
+        "component",
+        "component_type",
+        "metric_row_count",
+        "metric_measure_count",
+        "metric_tools",
+        "metric_run_ids",
+        "metric_latest_timestamp_utc",
+        "vulnerability_row_count",
+        "vulnerability_findings_total",
+        "vulnerability_critical",
+        "vulnerability_high",
+        "vulnerability_medium",
+        "vulnerability_low",
+        "vulnerability_info",
+        "vulnerability_unknown",
+        "vulnerability_tool_names",
+        "vulnerability_variants",
+        "vulnerability_run_ids",
+        "vulnerability_findings_truncated",
+        "vulnerability_embedded_finding_count",
+        "vulnerability_rule_count",
+        "vulnerability_rule_ids",
+        "vulnerability_cve_count",
+        "vulnerability_cve_ids",
+        "vulnerability_cwe_count",
+        "vulnerability_cwe_ids",
+    ]
+    fieldnames.extend(ordered_metric_columns)
+    return _write_csv(export_rows, fieldnames)
 
 
 def preferred_source(rows: list[dict[str, Any]]) -> str:
@@ -584,6 +774,109 @@ def _option_values(rows: list[dict[str, Any]], field: str) -> list[str]:
     return sorted(values)
 
 
+def _filter_vulnerability_rows(
+    rows: list[dict[str, Any]],
+    filters: dict[str, str],
+) -> tuple[list[dict[str, Any]], dict[str, Any], str, str, str]:
+    vulnerability_rows = [
+        row
+        for row in rows
+        if row.get("metric") == VULNERABILITY_METRIC and _is_total_vulnerability_row(row)
+    ]
+
+    options = {
+        "sources": _option_values(vulnerability_rows, "_source"),
+        "projects": _option_values(vulnerability_rows, "project"),
+        "tools": _option_values(vulnerability_rows, "tool"),
+        "runs": _option_values(vulnerability_rows, "run_id"),
+        "components": _option_values(vulnerability_rows, "component"),
+    }
+
+    source_candidates = [
+        row
+        for row in vulnerability_rows
+        if _match_filter(row.get("project"), filters.get("project"))
+        and _match_filter(row.get("tool"), filters.get("tool"))
+        and _match_filter(row.get("run_id"), filters.get("run_id"))
+        and _match_filter(row.get("component"), filters.get("component"))
+    ]
+    selected_source = filters.get("source") or preferred_source(source_candidates) or preferred_source(vulnerability_rows)
+    severity_filter = (filters.get("severity") or "").strip().lower()
+    search = (filters.get("search") or "").strip().lower()
+
+    filtered_rows = [
+        row
+        for row in vulnerability_rows
+        if _match_filter(row.get("_source"), selected_source)
+        and _match_filter(row.get("project"), filters.get("project"))
+        and _match_filter(row.get("tool"), filters.get("tool"))
+        and _match_filter(row.get("run_id"), filters.get("run_id"))
+        and _match_filter(row.get("component"), filters.get("component"))
+    ]
+    return filtered_rows, options, selected_source, severity_filter, search
+
+
+def _filter_metric_rows(
+    rows: list[dict[str, Any]],
+    filters: dict[str, str],
+) -> tuple[list[dict[str, Any]], dict[str, Any], str, str]:
+    metric_rows = [_decorate_metric_row(row) for row in rows if row.get("metric") != VULNERABILITY_METRIC]
+
+    options = {
+        "sources": _option_values(metric_rows, "_source"),
+        "projects": _option_values(metric_rows, "project"),
+        "metrics": _option_values(metric_rows, "metric"),
+        "tools": _option_values(metric_rows, "tool"),
+        "collector_scopes": _collector_scope_options(metric_rows),
+        "component_types": _option_values(metric_rows, "component_type"),
+        "runs": _option_values(metric_rows, "run_id"),
+        "statuses": _option_values(metric_rows, "status"),
+    }
+
+    source_candidates = []
+    for row in metric_rows:
+        if not _match_filter(row.get("project"), filters.get("project")):
+            continue
+        if not _match_filter(row.get("metric"), filters.get("metric")):
+            continue
+        if not _match_filter(row.get("tool"), filters.get("tool")):
+            continue
+        if not _match_filter(row.get("_collector_scope"), filters.get("collector_scope")):
+            continue
+        if not _match_filter(row.get("component_type"), filters.get("component_type")):
+            continue
+        if not _match_filter(row.get("run_id"), filters.get("run_id")):
+            continue
+        if not _match_filter(row.get("status"), filters.get("status")):
+            continue
+        source_candidates.append(row)
+    selected_source = filters.get("source") or preferred_source(source_candidates) or preferred_source(metric_rows)
+    search = (filters.get("search") or "").strip().lower()
+
+    filtered_rows = []
+    for row in metric_rows:
+        if not _match_filter(row.get("_source"), selected_source):
+            continue
+        if not _match_filter(row.get("project"), filters.get("project")):
+            continue
+        if not _match_filter(row.get("metric"), filters.get("metric")):
+            continue
+        if not _match_filter(row.get("tool"), filters.get("tool")):
+            continue
+        if not _match_filter(row.get("_collector_scope"), filters.get("collector_scope")):
+            continue
+        if not _match_filter(row.get("component_type"), filters.get("component_type")):
+            continue
+        if not _match_filter(row.get("run_id"), filters.get("run_id")):
+            continue
+        if not _match_filter(row.get("status"), filters.get("status")):
+            continue
+        if search and search not in _metric_search_blob(row):
+            continue
+        filtered_rows.append(row)
+    return filtered_rows, options, selected_source, search
+
+
 def _match_filter(value: Any, expected: str | None) -> bool:
     expected = str(expected or "").strip()
     if not expected:
@@ -639,6 +932,30 @@ def _metric_search_blob(row: dict[str, Any]) -> str:
         row.get("_collector_scope_label"),
     ]
     return " ".join(str(value or "") for value in values).lower()
+
+
+def extract_cve_ids(*values: Any) -> list[str]:
+    found = {match.group(0).upper() for value in values for match in CVE_RE.finditer(str(value or ""))}
+    return sorted(found)
+
+
+def _csv_join(values: list[Any]) -> str:
+    cleaned = [str(value).strip() for value in values if str(value).strip()]
+    return ";".join(cleaned)
+
+
+def _write_csv(rows: list[dict[str, Any]], fieldnames: list[str]) -> str:
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(
+            {
+                key: _csv_join(value) if isinstance(value, list) else value
+                for key, value in row.items()
+            }
+        )
+    return buffer.getvalue()
 
 
 def _decorate_metric_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -806,6 +1123,9 @@ def _normalize_finding(
         "confidence": str(finding.get("confidence", "")).strip(),
         "class_name": str(finding.get("class_name", "")).strip(),
         "method_name": str(finding.get("method_name", "")).strip(),
+        "package_name": str(finding.get("package_name", "")).strip(),
+        "package_version": str(finding.get("package_version", "")).strip(),
+        "dependency_scope": str(finding.get("dependency_scope", "")).strip(),
         "module": module,
         "cwe_ids": [str(item).strip() for item in finding.get("cwe_ids", []) if str(item).strip()],
         "owasp_tags": [str(item).strip() for item in finding.get("owasp_tags", []) if str(item).strip()],
@@ -1100,6 +1420,91 @@ def _resolve_source_file(
     return None
 
 
+def _metric_export_column(row: dict[str, Any]) -> str:
+    metric_name = str(row.get("metric", "")).strip() or "metric"
+    measure_name = _measure_label(row) or metric_name
+    tool_name = str(row.get("tool", "")).strip() or "tool"
+    return f"metric_{_column_slug(metric_name)}__{_column_slug(measure_name)}__{_column_slug(tool_name)}"
+
+
+def _aggregate_vulnerability_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return {
+            "vulnerability_row_count": 0,
+            "vulnerability_findings_total": 0,
+            "vulnerability_critical": 0,
+            "vulnerability_high": 0,
+            "vulnerability_medium": 0,
+            "vulnerability_low": 0,
+            "vulnerability_info": 0,
+            "vulnerability_unknown": 0,
+            "vulnerability_tool_names": "",
+            "vulnerability_variants": "",
+            "vulnerability_run_ids": "",
+            "vulnerability_findings_truncated": 0,
+            "vulnerability_embedded_finding_count": 0,
+            "vulnerability_rule_count": 0,
+            "vulnerability_rule_ids": "",
+            "vulnerability_cve_count": 0,
+            "vulnerability_cve_ids": "",
+            "vulnerability_cwe_count": 0,
+            "vulnerability_cwe_ids": "",
+        }
+
+    severity_counts = Counter({severity: 0 for severity in SEVERITY_ORDER})
+    rule_ids: set[str] = set()
+    cve_ids: set[str] = set()
+    cwe_ids: set[str] = set()
+    embedded_finding_count = 0
+    truncated = False
+
+    for row in rows:
+        severity_counts.update(_severity_breakdown_from_row(row))
+        parameters = row.get("parameters") if isinstance(row.get("parameters"), dict) else {}
+        findings = parameters.get("findings") if isinstance(parameters.get("findings"), list) else []
+        embedded_finding_count += len(findings)
+        truncated = truncated or bool(parameters.get("findings_truncated"))
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            rule_id = str(finding.get("rule_id", "")).strip()
+            if rule_id:
+                rule_ids.add(rule_id)
+            cve_ids.update(
+                extract_cve_ids(
+                    finding.get("rule_id"),
+                    finding.get("rule_name"),
+                    finding.get("message"),
+                )
+            )
+            for cwe_id in finding.get("cwe_ids", []) if isinstance(finding.get("cwe_ids"), list) else []:
+                normalized = str(cwe_id).strip()
+                if normalized:
+                    cwe_ids.add(normalized)
+
+    return {
+        "vulnerability_row_count": len(rows),
+        "vulnerability_findings_total": sum(_vulnerability_total(row) for row in rows),
+        "vulnerability_critical": severity_counts["critical"],
+        "vulnerability_high": severity_counts["high"],
+        "vulnerability_medium": severity_counts["medium"],
+        "vulnerability_low": severity_counts["low"],
+        "vulnerability_info": severity_counts["info"],
+        "vulnerability_unknown": severity_counts["unknown"],
+        "vulnerability_tool_names": _csv_join(_option_values(rows, "tool")),
+        "vulnerability_variants": _csv_join(_option_values(rows, "variant")),
+        "vulnerability_run_ids": _csv_join(_option_values(rows, "run_id")),
+        "vulnerability_findings_truncated": int(truncated),
+        "vulnerability_embedded_finding_count": embedded_finding_count,
+        "vulnerability_rule_count": len(rule_ids),
+        "vulnerability_rule_ids": _csv_join(sorted(rule_ids)),
+        "vulnerability_cve_count": len(cve_ids),
+        "vulnerability_cve_ids": _csv_join(sorted(cve_ids)),
+        "vulnerability_cwe_count": len(cwe_ids),
+        "vulnerability_cwe_ids": _csv_join(sorted(cwe_ids)),
+    }
+
+
 def _measure_label(row: dict[str, Any]) -> str:
     submetric = str(row.get("submetric", "")).strip()
     if submetric:
@@ -1118,3 +1523,9 @@ def _numeric_value(row: dict[str, Any]) -> bool:
 def _is_total_vulnerability_row(row: dict[str, Any]) -> bool:
     submetric = str(row.get("submetric", "")).strip()
     return not submetric or submetric == "vulnerability_total"
+
+
+def _column_slug(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower())
+    normalized = normalized.strip("_")
+    return normalized or "value"

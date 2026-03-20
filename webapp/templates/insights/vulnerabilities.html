@@ -115,7 +115,10 @@
         <h1 class="h2 mb-2">Vulnerability Findings</h1>
         <p class="text-body-secondary mb-0">Read embedded security findings, grouped by project component and scanner output.</p>
     </div>
-    <a href="{{ url_for('main.insights_overview') }}" class="btn btn-outline-secondary">Back to Insights</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ export_urls.findings_csv }}" class="btn btn-danger">Export Findings CSV</a>
+        <a href="{{ url_for('main.insights_overview') }}" class="btn btn-outline-secondary">Back to Insights</a>
+    </div>
 </div>
 
 <div class="row g-4">

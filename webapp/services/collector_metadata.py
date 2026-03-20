@@ -47,7 +47,9 @@ TOOL_SCOPE_OVERRIDES = {
     "pmd": "java",
     "spotbugs": "java",
     "radon": "python",
+    "exakat": "php",
     "psalm": "php",
+    "rips": "php",
 }
 COMPONENT_EXTENSION_SCOPES = {
     ".java": "java",

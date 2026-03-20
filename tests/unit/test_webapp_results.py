@@ -1,7 +1,16 @@
+import csv
+import io
 import json
 
 from webapp import create_app
-from webapp.services.results import build_metrics_view, build_vulnerability_view, load_result_rows
+from webapp.services.results import (
+    build_metrics_view,
+    build_vulnerability_view,
+    export_metric_rows_csv,
+    export_metrics_vulnerability_matrix_csv,
+    export_vulnerability_findings_csv,
+    load_result_rows,
+)
 
 
 def test_results_service_builds_vulnerability_summary(tmp_path):
@@ -576,6 +585,185 @@ def test_results_service_reads_nested_result_directories(tmp_path):
     assert {row["metric"] for row in rows} == {"loc", "cc"}
 
 
+def test_results_service_exports_vulnerability_findings_csv_with_cves(tmp_path):
+    results_dir = tmp_path / "results"
+    normalized_dir = tmp_path / "results_normalized"
+    results_dir.mkdir()
+    normalized_dir.mkdir()
+    vuln_dir = normalized_dir / "vulnerabilities" / "jsonl"
+    vuln_dir.mkdir(parents=True)
+
+    (vuln_dir / "repo-cves.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "run_id": "run-cves",
+                "project": "repo-cves",
+                "metric": "vulnerability-findings",
+                "variant": "dependency-check-default",
+                "component_type": "module",
+                "component": "service",
+                "submetric": "vulnerability_total",
+                "status": "ok",
+                "value": 1,
+                "tool": "dependency-check",
+                "tool_version": "12.2.0",
+                "parameters": {
+                    "summary": {
+                        "total": 1,
+                        "severity_critical": 1,
+                        "severity_high": 0,
+                        "severity_medium": 0,
+                        "severity_low": 0,
+                        "severity_info": 0,
+                        "severity_unknown": 0,
+                    },
+                    "findings": [
+                        {
+                            "rule_id": "CVE-2021-44228",
+                            "rule_name": "Log4Shell",
+                            "message": "Vulnerable dependency found",
+                            "severity": "critical",
+                            "source_path": "pom.xml",
+                            "start_line": 12,
+                            "package_name": "org.apache.logging.log4j:log4j-core",
+                            "package_version": "2.14.1",
+                            "cwe_ids": ["CWE-502"],
+                        }
+                    ],
+                },
+                "timestamp_utc": "2026-03-20T13:00:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = load_result_rows(results_dir, normalized_dir)
+    csv_text = export_vulnerability_findings_csv(rows, {"source": "normalized", "project": "repo-cves"})
+    exported_rows = list(csv.DictReader(io.StringIO(csv_text)))
+
+    assert len(exported_rows) == 1
+    assert exported_rows[0]["project"] == "repo-cves"
+    assert exported_rows[0]["tool"] == "dependency-check"
+    assert exported_rows[0]["cve_ids"] == "CVE-2021-44228"
+    assert exported_rows[0]["cve_primary"] == "CVE-2021-44228"
+    assert exported_rows[0]["package_name"] == "org.apache.logging.log4j:log4j-core"
+
+
+def test_results_service_exports_metrics_vulnerability_matrix_csv(tmp_path):
+    results_dir = tmp_path / "results"
+    normalized_dir = tmp_path / "results_normalized"
+    results_dir.mkdir()
+    normalized_dir.mkdir()
+    metrics_dir = results_dir / "software-metrics" / "jsonl"
+    vulnerabilities_dir = results_dir / "vulnerabilities" / "jsonl"
+    metrics_dir.mkdir(parents=True)
+    vulnerabilities_dir.mkdir(parents=True)
+
+    (metrics_dir / "repo-alpha.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "run_id": "run-metrics-1",
+                        "project": "repo-alpha",
+                        "metric": "cc",
+                        "submetric": "cc_proxy_mean",
+                        "variant": "lizard-default",
+                        "component_type": "module",
+                        "component": "core",
+                        "status": "ok",
+                        "value": 4.5,
+                        "tool": "lizard",
+                        "tool_version": "1.0",
+                        "parameters": {},
+                        "timestamp_utc": "2026-03-20T10:00:01Z",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "run_id": "run-metrics-2",
+                        "project": "repo-alpha",
+                        "metric": "class-count",
+                        "variant": "javaparser-default",
+                        "component_type": "module",
+                        "component": "core",
+                        "status": "ok",
+                        "value": 12.0,
+                        "tool": "javaparser",
+                        "tool_version": "1.0",
+                        "parameters": {},
+                        "timestamp_utc": "2026-03-20T10:00:02Z",
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (vulnerabilities_dir / "repo-alpha.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "run_id": "run-vuln-1",
+                "project": "repo-alpha",
+                "metric": "vulnerability-findings",
+                "variant": "dependency-check-default",
+                "component_type": "module",
+                "component": "core",
+                "submetric": "vulnerability_total",
+                "status": "ok",
+                "value": 1,
+                "tool": "dependency-check",
+                "tool_version": "12.2.0",
+                "parameters": {
+                    "summary": {
+                        "total": 1,
+                        "severity_critical": 1,
+                        "severity_high": 0,
+                        "severity_medium": 0,
+                        "severity_low": 0,
+                        "severity_info": 0,
+                        "severity_unknown": 0,
+                    },
+                    "findings": [
+                        {
+                            "rule_id": "CVE-2021-44228",
+                            "rule_name": "Log4Shell",
+                            "message": "Vulnerable dependency found",
+                            "severity": "critical",
+                            "source_path": "pom.xml",
+                            "start_line": 12,
+                            "cwe_ids": ["CWE-502"],
+                        }
+                    ],
+                },
+                "timestamp_utc": "2026-03-20T10:05:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = load_result_rows(results_dir, normalized_dir)
+    csv_text = export_metrics_vulnerability_matrix_csv(
+        rows,
+        {"source": "raw", "project": "repo-alpha", "component_type": "module"},
+    )
+    exported_rows = list(csv.DictReader(io.StringIO(csv_text)))
+
+    assert len(exported_rows) == 1
+    assert exported_rows[0]["project"] == "repo-alpha"
+    assert exported_rows[0]["component"] == "core"
+    assert exported_rows[0]["vulnerability_findings_total"] == "1"
+    assert exported_rows[0]["vulnerability_cve_ids"] == "CVE-2021-44228"
+    assert exported_rows[0]["metric_cc__cc_proxy_mean__lizard"] == "4.5"
+    assert exported_rows[0]["metric_class_count__class_count__javaparser"] == "12.0"
+
+
 def test_results_routes_render_after_login(tmp_path):
     makefile_path = tmp_path / "Makefile"
     makefile_path.write_text("clean:\n\t@echo clean\n", encoding="utf-8")
@@ -813,6 +1001,8 @@ def test_results_routes_render_after_login(tmp_path):
     assert "Flow Trace" in vulnerabilities_html
     assert 'data-flow-jump="' in vulnerabilities_html
     assert "Scroll inside this panel to inspect long traces." in vulnerabilities_html
+    assert "Export Findings CSV" in vulnerabilities_html
+    assert "/insights/vulnerabilities/export.csv?source=normalized" in vulnerabilities_html
     assert "Source" in vulnerabilities_html
     assert "Sink" in vulnerabilities_html
     assert vulnerabilities_raw.status_code == 200
@@ -823,6 +1013,125 @@ def test_results_routes_render_after_login(tmp_path):
     assert "CLOC" in metrics_html
     assert "Collector scope" in metrics_html
     assert "Generic" in metrics_html
+    assert "Export Metrics + Vulnerabilities CSV" in metrics_html
+    assert "/insights/metrics/export.csv?source=raw" in metrics_html
+    assert "/insights/metrics/export-matrix.csv?source=raw" in metrics_html
+
+
+def test_results_export_routes_return_csv_after_login(tmp_path):
+    makefile_path = tmp_path / "Makefile"
+    makefile_path.write_text("clean:\n\t@echo clean\n", encoding="utf-8")
+    results_dir = tmp_path / "results"
+    normalized_dir = tmp_path / "results_normalized"
+    results_dir.mkdir()
+    normalized_dir.mkdir()
+    (results_dir / "software-metrics" / "jsonl").mkdir(parents=True, exist_ok=True)
+    (results_dir / "vulnerabilities" / "jsonl").mkdir(parents=True, exist_ok=True)
+
+    (results_dir / "software-metrics" / "jsonl" / "repo-export.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "run_id": "run-metrics",
+                "project": "repo-export",
+                "metric": "class-count",
+                "variant": "javaparser-default",
+                "component_type": "module",
+                "component": "core",
+                "status": "ok",
+                "value": 8,
+                "tool": "javaparser",
+                "tool_version": "1.0",
+                "parameters": {},
+                "timestamp_utc": "2026-03-20T14:00:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (results_dir / "vulnerabilities" / "jsonl" / "repo-export.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "run_id": "run-vulns",
+                "project": "repo-export",
+                "metric": "vulnerability-findings",
+                "variant": "dependency-check-default",
+                "component_type": "module",
+                "component": "core",
+                "submetric": "vulnerability_total",
+                "status": "ok",
+                "value": 1,
+                "tool": "dependency-check",
+                "tool_version": "12.2.0",
+                "parameters": {
+                    "summary": {
+                        "total": 1,
+                        "severity_critical": 1,
+                        "severity_high": 0,
+                        "severity_medium": 0,
+                        "severity_low": 0,
+                        "severity_info": 0,
+                        "severity_unknown": 0,
+                    },
+                    "findings": [
+                        {
+                            "rule_id": "CVE-2021-44228",
+                            "rule_name": "Log4Shell",
+                            "message": "Vulnerable dependency found",
+                            "severity": "critical",
+                            "source_path": "pom.xml",
+                            "start_line": 12,
+                            "cwe_ids": ["CWE-502"],
+                        }
+                    ],
+                },
+                "timestamp_utc": "2026-03-20T14:01:00Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "ADMIN_PASSWORD": "secret",
+            "SECRET_KEY": "test-secret",
+            "PROJECT_ROOT": tmp_path,
+            "MAKEFILE_PATH": makefile_path,
+            "SRC_DIR": tmp_path / "src",
+            "RESULTS_DIR": results_dir,
+            "RESULTS_NORMALIZED_DIR": normalized_dir,
+            "ANALYSIS_OUT_DIR": tmp_path / "analysis_out",
+            "UPLOAD_TMP_DIR": tmp_path / ".webapp_uploads",
+        }
+    )
+    client = app.test_client()
+
+    login_page = client.get("/login")
+    token = login_page.get_data(as_text=True).split('name="csrf_token" value="', 1)[1].split('"', 1)[0]
+    client.post(
+        "/login",
+        data={"username": "swadmin", "password": "secret", "csrf_token": token},
+        follow_redirects=True,
+    )
+
+    vulnerabilities_export = client.get("/insights/vulnerabilities/export.csv?source=raw&project=repo-export")
+    metrics_export = client.get("/insights/metrics/export.csv?source=raw&project=repo-export")
+    matrix_export = client.get("/insights/metrics/export-matrix.csv?source=raw&project=repo-export")
+
+    assert vulnerabilities_export.status_code == 200
+    assert 'attachment; filename="vulnerability-findings-export.csv"' in vulnerabilities_export.headers["Content-Disposition"]
+    assert "CVE-2021-44228" in vulnerabilities_export.get_data(as_text=True)
+    assert metrics_export.status_code == 200
+    assert 'attachment; filename="software-metrics-export.csv"' in metrics_export.headers["Content-Disposition"]
+    assert "class-count" in metrics_export.get_data(as_text=True)
+    assert matrix_export.status_code == 200
+    assert 'attachment; filename="metrics-vulnerabilities-matrix-export.csv"' in matrix_export.headers["Content-Disposition"]
+    matrix_body = matrix_export.get_data(as_text=True)
+    assert "vulnerability_cve_ids" in matrix_body
+    assert "CVE-2021-44228" in matrix_body
 
 
 def test_ajax_queue_selected_targets_returns_json(tmp_path):
